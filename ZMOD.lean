@@ -1,0 +1,279 @@
+import data.int.modeq data.int.basic data.nat.modeq data.equiv data.fintype data.nat.prime data.nat.gcd data.pnat .int_gcd data.nat.prime
+
+@[simp] lemma nat.mod_mod (n m : ℕ) : n % m % m = n % m := 
+nat.cases_on m (by simp) (λ m, nat.mod_eq_of_lt (nat.mod_lt _ (nat.succ_pos _)))
+
+@[simp] lemma int.mod_mod (a b : ℤ) : a % b % b = a % b :=
+by conv {to_rhs, rw [← int.mod_add_div a b, int.add_mul_mod_self_left]}
+
+@[simp] lemma int.mod_neg_mod (a b : ℤ) : (-(a % b) % b) = (-a % b) :=
+by conv {to_rhs, rw [← int.mod_add_div a b, neg_add, neg_mul_eq_mul_neg, int.add_mul_mod_self_left]}
+
+open nat nat.modeq int
+
+def Zmod (n : ℕ) := subtype (< n)
+
+namespace Zmod
+
+@[simp] lemma nat_mod_coe_pnat (n : ℕ+) (a : ℤ) : (nat_mod a ((n : ℕ) : ℤ) : ℤ) = a % ((n : ℕ) : ℤ) := 
+have h : (n : ℤ) ≠ 0 := (ne_of_lt (int.coe_nat_lt.2 n.2)).symm,
+by rw [← coe_coe, nat_mod, to_nat_of_nonneg (mod_nonneg _ h)]
+
+def of_int (n : ℕ+) (a : ℤ) : Zmod n := 
+⟨int.nat_mod a n,
+begin
+  cases n with n hn,
+  cases n with n,
+  { exact (nat.not_lt_zero _ hn).elim },
+  { have h : ((⟨succ n, hn⟩ : ℕ+) : ℤ) ≠ 0 := dec_trivial,
+    rw [← int.coe_nat_lt, int.nat_mod, int.to_nat_of_nonneg (int.mod_nonneg _ h)],
+    exact int.mod_lt _ h }
+end⟩
+
+def of_nat (n : ℕ+) (a : ℕ) : Zmod n :=
+⟨a % n, nat.mod_lt _ n.2⟩
+
+--Copied from core, but marked as private in core
+lemma mlt {n b : nat} : ∀ {a}, n > a → b % n < n
+| 0     h := nat.mod_lt _ h
+| (a+1) h :=
+  have n > 0, from lt.trans (nat.zero_lt_succ _) h,
+  nat.mod_lt _ this
+
+def add_aux {n : ℕ} (a b : Zmod n) : Zmod n :=
+⟨(a.1 + b.1) % n, mlt a.2⟩ 
+
+def mul_aux {n : ℕ} (a b : Zmod n) : Zmod n :=
+⟨(a.1 * b.1) % n, mlt a.2⟩
+
+def neg_aux {n : ℕ} (a : Zmod n) : Zmod n :=
+⟨nat_mod (-(a.1 : ℤ)) n, 
+begin
+  cases n with n,
+  { exact (nat.not_lt_zero _ a.2).elim },
+  { have h : (nat.succ n : ℤ) ≠ 0 := dec_trivial,
+    rw [← int.coe_nat_lt, nat_mod, to_nat_of_nonneg (int.mod_nonneg _ h)],
+    exact int.mod_lt _ h }
+end⟩
+
+instance (n : ℕ) : add_comm_semigroup (Zmod n) :=
+{ add := add_aux,
+  add_assoc := λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, subtype.eq 
+    (show ((a + b) % n + c) ≡ (a + (b + c) % n) [MOD n], 
+    from calc ((a + b) % n + c) ≡ a + b + c [MOD n] : modeq_add (nat.mod_mod _ _) rfl
+      ... ≡ a + (b + c) [MOD n] : by rw add_assoc
+      ... ≡ (a + (b + c) % n) [MOD n] : modeq_add rfl (nat.mod_mod _ _).symm),
+  add_comm := λ a b, subtype.eq (show (a.1 + b.1) % n = (b.1 + a.1) % n, by rw add_comm) }
+
+instance (n : ℕ) : comm_semigroup (Zmod n) :=
+{ mul := mul_aux,
+  mul_assoc := λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, subtype.eq 
+    (calc ((a * b) % n * c) ≡ a * b * c [MOD n] : modeq_mul (nat.mod_mod _ _) rfl
+      ... ≡ a * (b * c) [MOD n] : by rw mul_assoc
+      ... ≡ a * (b * c % n) [MOD n] : modeq_mul rfl (nat.mod_mod _ _).symm),
+  mul_comm := λ a b, subtype.eq (show (a.1 * b.1) % n = (b.1 * a.1) % n, by rw mul_comm) }
+
+lemma one_mul_aux : ∀ (n : ℕ+) (a : Zmod n), of_nat n 1 * a = a := 
+λ ⟨n, hn⟩ ⟨a, ha⟩, subtype.eq (show (1 % n * a) % n = a, 
+begin
+  clear _fun_match,
+  cases n with n,
+  { simp },
+  { cases n with n,
+    { rw [nat.mod_self, zero_mul];
+      exact (nat.eq_zero_of_le_zero (le_of_lt_succ ha)).symm },
+    { have h : 1 < n + 2 := dec_trivial,
+      have ha : a < succ (succ n) := ha,
+      rw [nat.mod_eq_of_lt h, one_mul, nat.mod_eq_of_lt ha] } }
+end)
+
+lemma left_distrib_aux (n : ℕ) : ∀ a b c : Zmod n, a * (b + c) = a * b + a * c :=
+λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, subtype.eq
+(calc a * ((b + c) % n) ≡ a * (b + c) [MOD n] : modeq_mul rfl (nat.mod_mod _ _)
+  ... ≡ a * b + a * c [MOD n] : by rw mul_add
+  ... ≡ (a * b) % n + (a * c) % n [MOD n] : modeq_add (nat.mod_mod _ _).symm (nat.mod_mod _ _).symm)
+
+instance (n : ℕ) : has_neg (Zmod n) := ⟨neg_aux⟩
+
+instance (n : ℕ) : distrib (Zmod n) :=
+{ left_distrib := left_distrib_aux n,
+  right_distrib := λ a b c, by rw [mul_comm, left_distrib_aux, mul_comm _ b, mul_comm]; refl,
+  ..Zmod.add_comm_semigroup n,
+  ..Zmod.comm_semigroup n }
+
+instance (n : ℕ+) : comm_ring (Zmod n) :=
+{ zero := ⟨0, n.2⟩,
+  zero_add := λ ⟨a, ha⟩, subtype.eq (show (0 + a) % n = a, by rw zero_add; exact nat.mod_eq_of_lt ha),
+  add_zero := λ ⟨a, ha⟩, subtype.eq (nat.mod_eq_of_lt ha),
+  neg := has_neg.neg,
+  add_left_neg := 
+    λ ⟨a, ha⟩, subtype.eq (show (((-a : ℤ) % n).to_nat + a) % n = 0,
+      from int.coe_nat_inj
+      begin
+        have hn : (n : ℤ) ≠ 0 := (ne_of_lt (int.coe_nat_lt.2 n.2)).symm,
+        rw [int.coe_nat_mod, int.coe_nat_add, to_nat_of_nonneg (int.mod_nonneg _ hn), add_comm],
+        simp,
+      end),
+  one := of_nat n 1,
+  one_mul := one_mul_aux n,
+  mul_one := λ a, by rw mul_comm; exact one_mul_aux n a,
+  ..Zmod.distrib n,
+  ..Zmod.add_comm_semigroup n,
+  ..Zmod.comm_semigroup n }
+
+instance {n : ℕ+} : has_coe ℤ (Zmod n) := ⟨of_int n⟩
+
+instance Zmod_coe_nat (n : ℕ+) : has_coe ℕ (Zmod n) := ⟨of_nat n⟩
+
+@[simp] lemma coe_nat_coe_int (n : ℕ+) (a : ℕ) : (((a : ℕ) : ℤ) : Zmod n) = a :=
+subtype.eq $ int.coe_nat_inj $ (show (nat_mod a n : ℤ)= a % n, by simp)
+
+lemma coe_eq_of_nat {n : ℕ+} (a : ℕ) : (a : Zmod n) = of_nat n a := rfl
+
+lemma coe_int_add (n : ℕ+) (a b : ℤ) : ((a + b : ℤ) : Zmod n) = a + b := 
+subtype.eq (show nat_mod (a + b) n = (nat_mod a n + nat_mod b n) % n, 
+  from int.coe_nat_inj (by simp [int.coe_nat_add]))
+
+lemma coe_int_mul (n : ℕ+) (a b : ℤ) : ((a * b : ℤ) : Zmod n) = a * b := 
+subtype.eq (show nat_mod (a * b) n = (nat_mod a n * nat_mod b n) % n, 
+  from int.coe_nat_inj (begin
+    rw [coe_coe, nat_mod_coe_pnat, int.coe_nat_mod, int.coe_nat_mul, nat_mod_coe_pnat, nat_mod_coe_pnat],
+    exact int.modeq.modeq_mul (int.mod_mod _ _).symm (int.mod_mod _ _).symm
+  end))
+
+lemma coe_int_neg (n : ℕ+) (a : ℤ) : ((-a : ℤ) : Zmod n) = -a := 
+subtype.eq (show nat_mod (-a) n = nat_mod (-↑(nat_mod a n)) n,
+from int.coe_nat_inj (by simp))
+
+lemma coe_int_sub (n : ℕ+) (a b : ℤ) : ((a - b : ℤ) : Zmod n) = a - b := 
+by rw [sub_eq_add_neg, coe_int_add, coe_int_neg, sub_eq_add_neg]
+
+lemma coe_nat_add (n : ℕ+) (a b : ℕ) : ((a + b : ℕ) : Zmod n) = a + b := 
+subtype.eq (modeq_add (nat.mod_mod _ _).symm (nat.mod_mod _ _).symm)
+
+lemma coe_nat_mul (n : ℕ+) (a b : ℕ) : ((a * b : ℕ) : Zmod n) = a * b := 
+subtype.eq (modeq_mul (nat.mod_mod _ _).symm (nat.mod_mod _ _).symm)
+
+lemma coe_nat_sub (n : ℕ+) {a b : ℕ} (h : b ≤ a) : ((a - b : ℕ) : Zmod n) = a - b :=
+by rw [← coe_nat_coe_int, int.coe_nat_sub h, coe_int_sub]; simp
+
+@[simp] lemma coe_eq_zero' (n : ℕ+) : ((n : ℕ) : Zmod n) = 0 := 
+subtype.eq (nat.mod_self _)
+
+lemma eq_iff_modeq_nat {n : ℕ+} {a b : ℕ} : (a : Zmod n) = b ↔ a ≡ b [MOD n] := 
+⟨subtype.mk.inj, λ h, subtype.eq h⟩
+
+@[simp] lemma val_coe {n : ℕ+} (a : Zmod n) : (a.val : Zmod n) = a := 
+subtype.eq (nat.mod_eq_of_lt a.2)
+
+lemma eq_iff_modeq_int {n : ℕ+} {a b : ℤ} : (a : Zmod n) = b ↔ a ≡ b [ZMOD n] :=
+⟨λ h, begin 
+  have := (int.coe_nat_eq_coe_nat_iff _ _).2 (subtype.mk.inj h),
+  rw [coe_coe, nat_mod_coe_pnat, nat_mod_coe_pnat] at this,
+  exact this
+end,
+λ h, subtype.eq (show nat_mod a n = nat_mod b n, from 
+  int.coe_nat_inj begin 
+  rw [coe_coe, nat_mod_coe_pnat, nat_mod_coe_pnat],
+  exact h
+end)⟩
+
+@[simp] lemma coe_int_mod (n : ℕ+) (a : ℤ) : ((a % ((n : ℕ) : ℤ) : ℤ) : Zmod n) = a :=
+eq_iff_modeq_int.2 (int.mod_mod _ _)
+
+@[simp] lemma coe_nat_mod (n : ℕ+) (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
+eq_iff_modeq_nat.2 (nat.mod_mod _ _)
+
+@[simp] lemma coe_nat_zero (n : ℕ+) : ((0 : ℕ) : Zmod n) = 0 := 
+subtype.eq (nat.zero_mod _)
+
+@[simp] lemma coe_int_zero (n : ℕ+) : ((0 : ℤ) : Zmod n) = 0 :=
+by rw [← int.coe_nat_zero, coe_nat_coe_int, coe_nat_zero]
+
+@[simp] lemma coe_nat_one (n : ℕ+) : ((1 : ℕ) : Zmod n) = 1 := rfl
+
+@[simp] lemma coe_int_one (n : ℕ+) : ((1 : ℤ) : Zmod n) = 1 := rfl 
+
+@[simp] lemma coe_nat_bit0 (n : ℕ+) (a : ℕ) : ((bit0 a : ℕ) : Zmod n) = bit0 (a : Zmod n) := coe_nat_add _ _ _
+
+@[simp] lemma coe_nat_bit1 (n : ℕ+) (a : ℕ) : ((bit1 a : ℕ) : Zmod n) = bit1 (a : Zmod n) :=
+by rw [bit1, bit1, coe_nat_add, coe_nat_bit0, coe_nat_one]
+
+@[simp] lemma coe_int_bit0 (n : ℕ+) (a : ℤ) : ((bit0 a : ℤ) : Zmod n) = bit0 (a : Zmod n) := coe_int_add _ _ _
+
+@[simp] lemma coe_int_bit1 (n : ℕ+) (a : ℤ) : ((bit1 a : ℤ) : Zmod n) = bit1 (a : Zmod n) :=
+by rw [bit1, bit1, coe_int_add, coe_int_bit0, coe_int_one]
+
+lemma eq_zero_iff_dvd_nat (n : ℕ+) (a : ℕ) : (a : Zmod n) = 0 ↔ (n : ℕ) ∣ a := 
+⟨nat.dvd_of_mod_eq_zero ∘ subtype.mk.inj,
+  subtype.eq ∘ nat.mod_eq_zero_of_dvd⟩
+
+lemma eq_zero_iff_dvd_int (n : ℕ+) (a : ℤ) : (a : Zmod n) = 0 ↔ (n : ℤ) ∣ a :=
+⟨λ h, int.modeq.modeq_zero_iff.1 (eq_iff_modeq_int.1 (by  rw [h, coe_int_zero])),
+λ h, by rwa [← int.modeq.modeq_zero_iff, ← eq_iff_modeq_int, coe_int_zero] at h⟩
+
+lemma coe_int_pow (n : ℕ+) (a : ℤ) (k : ℕ) : ((a ^ k : ℤ) : Zmod n) = (a : Zmod n) ^ k :=
+by induction k; simp [_root_.pow_succ, *, coe_int_mul]
+
+def to_nat {n : ℕ} (a : Zmod n) : ℕ := a.1
+
+lemma to_nat_lt {n : ℕ} (a : Zmod n) : a.to_nat < n := a.2
+
+def equiv_fin (n : ℕ) : Zmod n ≃ fin (nat_abs n) :=
+{ to_fun := λ ⟨a, h⟩, ⟨a, h⟩,
+  inv_fun := λ ⟨a, h⟩, ⟨a, h⟩,
+  left_inv := λ ⟨_, _⟩, rfl,
+  right_inv := λ ⟨_, _⟩, rfl }
+
+instance (n : ℕ) : fintype (Zmod n) :=
+fintype.of_equiv _ (equiv_fin n).symm
+
+lemma card_Zmod {n : ℕ} : fintype.card (Zmod n) = n :=
+eq.trans (fintype.card_congr (equiv_fin n)) (fintype.card_fin _)
+
+private def inv_aux {n : ℕ+} (a : Zmod n) : Zmod n := gcd_a a.1 n
+
+instance (n : ℕ+) : has_inv (Zmod n) := ⟨inv_aux⟩
+
+@[simp] lemma int.gcd_neg (a b : ℤ) : int.gcd (-a) b = int.gcd a b :=
+by unfold int.gcd; rw nat_abs_neg
+
+lemma gcd_a_modeq (a b : ℕ) : (a : ℤ) * gcd_a a b ≡ nat.gcd a b [ZMOD b] :=
+by rw [← add_zero ((a : ℤ) * _), gcd_eq_gcd_ab];
+  exact int.modeq.modeq_add rfl (int.modeq.modeq_zero_iff.2 (dvd_mul_right _ _)).symm
+
+lemma mul_inv_eq_gcd_nat (n : ℕ+) (a : ℕ) : (a : Zmod n) * a⁻¹ = nat.gcd a n :=
+eq_iff_modeq_nat.2 $ int.modeq.coe_nat_modeq_iff.1
+  (calc ((a % n * nat_mod (gcd_a (a % n) n) ↑n : ℕ) : ℤ) ≡ (a % n : ℕ) * gcd_a (a % n) n [ZMOD n] : 
+    by rw [coe_coe, int.coe_nat_mul, nat_mod_coe_pnat]; exact int.modeq.modeq_mul rfl (int.mod_mod _ _)
+  ... ≡ nat.gcd (a % n) n [ZMOD n] : gcd_a_modeq _ _
+  ... = (nat.gcd a n : ℤ) : by rw [← gcd_rec, nat.gcd_comm])
+
+lemma mul_inv_eq_gcd_int (n : ℕ+) (a : ℤ) : (a : Zmod n) * a⁻¹ = int.gcd a n :=
+have h : ((n : ℕ) : ℤ) ≠ 0 := (ne_of_lt (int.coe_nat_lt.2 n.2)).symm,
+begin
+  rw [int.gcd_comm, ← int.gcd_mod, int.gcd, coe_coe, nat_abs_of_nat, ← mul_inv_eq_gcd_nat,
+    ← coe_nat_coe_int _ (nat_abs _), nat_abs_of_nonneg (mod_nonneg _ h)],
+  simp,
+end
+
+private lemma mul_inv_cancel_aux {p : {n : ℕ+ // nat.prime n.1}} (a : Zmod (p : ℕ+)) (ha : a ≠ 0) : a * a⁻¹ = 1 := 
+begin
+  rw [← val_coe a, ne.def, eq_zero_iff_dvd_nat] at ha,
+  have : coprime ((p : ℕ+) : ℕ) a.val := p.2.coprime_iff_not_dvd.2 ha,
+  rw [← val_coe a, mul_inv_eq_gcd_nat, nat.gcd_comm, coprime.gcd_eq_one this],
+  refl,
+end
+
+instance Zmod_prime_field (p : {n : ℕ+ // nat.prime n.1}) : field (Zmod (p : ℕ+)) :=
+{ inv := has_inv.inv,
+  zero_ne_one := λ h, begin 
+    have : 0 = 1 % p.1.1 := subtype.mk.inj h,
+    rw nat.mod_eq_of_lt (p.2.gt_one) at this,
+    exact nat.no_confusion this,
+  end,
+  mul_inv_cancel := mul_inv_cancel_aux,
+  inv_mul_cancel := λ a ha, by rw mul_comm; exact mul_inv_cancel_aux a ha,
+  ..Zmod.comm_ring p.1 }
+
+end Zmod
