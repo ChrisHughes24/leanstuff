@@ -571,37 +571,39 @@ lemma root_or_root_of_root_mul (h : root (p * q) a) : root p a ∨ root q a :=
 by rw [root, eval_mul] at h;
   exact eq_zero_or_eq_zero_of_mul_eq_zero h
 
-noncomputable def roots_aux : Π {p : polynomial α} (hp : p ≠ 0), 
-  {s : finset α // s.card ≤ degree p ∧ ∀ x, root p x ↔ x ∈ s}
-| p :=
-λ hp, @dite (∃ x, root p x) (classical.prop_decidable _) 
-  {s : finset α // s.card ≤ degree p ∧ ∀ x, root p x ↔ x ∈ s}
-  (λ h, let ⟨x, hx⟩ := classical.indefinite_description _ h in
-  have hpd : 0 < degree p := nat.pos_of_ne_zero 
-    (λ h, begin 
-      rw [eq_C_of_degree_eq_zero h, root, eval_C] at hx, 
-      have h1 : p (degree p) ≠ 0 := leading_coeff_ne_zero hp,
-      rw h at h1,
-      contradiction,
-    end),
-  have hd0 : div_by_monic p (monic_X_sub_C x) ≠ 0 :=
-    λ h, by have := mul_div_eq_iff_root.2 hx;
-      simp * at *,
-  have wf : degree (div_by_monic p _) < degree p := 
-    degree_div_by_monic_lt _ (monic_X_sub_C x) 
-    ((degree_X_sub_C x).symm ▸ nat.succ_pos _) hpd,
-  let ⟨t, htd, htr⟩ := @roots_aux (div_by_monic p (monic_X_sub_C x)) hd0 in
-  ⟨insert x t, calc (insert x t).card ≤ t.card + 1 : finset.card_insert_le _ _
-    ... ≤ degree (div_by_monic p (monic_X_sub_C x)) + 1 : nat.succ_le_succ htd
-    ... ≤ _ : nat.succ_le_of_lt wf,
-  begin
-    assume y,
-    rw [mem_insert, ← htr, eq_comm, ← root_X_sub_C],
-    conv {to_lhs, rw ← mul_div_eq_iff_root.2 hx},
-    exact ⟨root_or_root_of_root_mul, λ h, or.cases_on h (root_mul_right_of_root _) (root_mul_left_of_root _)⟩  
-  end⟩)
-  (λ h, ⟨∅, nat.zero_le _, by finish⟩)
-using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
+noncomputable def roots_aux {p : polynomial α} (hp : p ≠ 0) :
+  {s : finset α // s.card ≤ degree p ∧ ∀ x, root p x ↔ x ∈ s} :=
+well_founded.fix_F (p : polynomial α) (measure_wf degree)
+(λ p (ih : Π q : polynomial α, degree q < degree p → q ≠ 0 → 
+  {s : finset α // s.card ≤ degree q ∧ ∀ x, root q x ↔ x ∈ s}) hp,
+by haveI := classical.prop_decidable (∃ x, root p x); exact
+if h : ∃ x, root p x 
+then let ⟨x, hx⟩ := classical.indefinite_description _ h in
+have hpd : 0 < degree p := nat.pos_of_ne_zero 
+  (λ h, begin 
+    rw [eq_C_of_degree_eq_zero h, root, eval_C] at hx, 
+    have h1 : p (degree p) ≠ 0 := leading_coeff_ne_zero hp,
+    rw h at h1,
+    contradiction,
+  end),
+have hd0 : div_by_monic p (monic_X_sub_C x) ≠ 0 :=
+  λ h, by have := mul_div_eq_iff_root.2 hx;
+    simp * at *,
+have wf : degree (div_by_monic p _) < degree p := 
+  degree_div_by_monic_lt _ (monic_X_sub_C x) 
+  ((degree_X_sub_C x).symm ▸ nat.succ_pos _) hpd,
+let ⟨t, htd, htr⟩ := ih _ wf hd0 in
+⟨insert x t, calc (insert x t).card ≤ t.card + 1 : finset.card_insert_le _ _
+  ... ≤ degree (div_by_monic p (monic_X_sub_C x)) + 1 : nat.succ_le_succ htd
+  ... ≤ _ : nat.succ_le_of_lt wf,
+begin
+  assume y,
+  rw [mem_insert, ← htr, eq_comm, ← root_X_sub_C],
+  conv {to_lhs, rw ← mul_div_eq_iff_root.2 hx},
+  exact ⟨root_or_root_of_root_mul, λ h, or.cases_on h (root_mul_right_of_root _) (root_mul_left_of_root _)⟩  
+end⟩
+else ⟨∅, nat.zero_le _, by finish⟩) 
+  hp
 
 #print axioms roots_aux
 
