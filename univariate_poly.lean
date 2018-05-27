@@ -35,20 +35,6 @@ end
 
 end finset
 
-namespace set
-
-@[simp] theorem card_insert_le {α : Type*} [decidable_eq α] {a : α} (s : set α) [fintype s] 
-  [hf : fintype (insert a s : set α)] : fintype.card (insert a s : set α) ≤ fintype.card s + 1 :=
-if h : a ∈ s then calc fintype.card ↥(insert a s) = fintype.card s 
-          : by congr; exact set.insert_eq_of_mem h
-  ... ≤ _ : nat.le_succ _
-else calc @fintype.card ↥(insert a s) hf = 
-      @fintype.card ↥(insert a s) (set.fintype_insert a s) : by congr
-  ... = fintype.card s + 1 : set.card_insert _ h
-  ... ≤ _ : le_refl _
-
-end set
-
 namespace finsupp
 
 lemma erase_single {α β : Type*} [decidable_eq α] [decidable_eq β] [has_zero β]
