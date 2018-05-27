@@ -378,6 +378,8 @@ begin
   simp,
 end
 
+example (1 : Zmod 7) = 8 := dec_trivial
+
 lemma euler_criterion {p : {p // nat.prime p}} (hpo : (p : ℕ) % 2 = 1) {a : units (Zmod p)}
   : (∃ x, x * x = a) ↔ a ^ (((p : ℕ) - 1) / 2) = 1 :=
 have h₁ : {b : units (Zmod p) | ∃ x, x * x = b} ⊆ {b | b ^ (((p : ℕ) - 1) / 2) = 1} :=
