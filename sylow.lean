@@ -1,7 +1,10 @@
-import group_theory.order_of_element data.equiv data.fintype data.nat.prime data.nat.modeq
-open equiv fintype
+import group_theory.order_of_element data.fintype data.nat.prime data.nat.modeq
+open equiv fintype finset
 universes u v w
 variables {G : Type u} {α : Type v} {β : Type w} [group G]
+
+def fin_list (n : ℕ) : list (fin n) := 
+  (list.range n).pmap (λ m hm, ⟨m, hm⟩) (λ m hm, list.mem_range.1 hm)
 
 namespace finset
 
@@ -83,11 +86,11 @@ lemma card_pi {β : α → Type*} [fintype α] [decidable_eq α]
   card (Π a, β a) = univ.prod (λ a, card (β a)) :=
 by letI f : fintype (Πa∈univ, β a) :=
   ⟨(univ.pi $ λa, univ), assume f, finset.mem_pi.2 $ assume a ha, mem_univ _⟩;
-exact calc card (Π a, β a) = @card (Π a ∈ univ, β a) f : card_congr 
+exact calc card (Π a, β a) = card (Π a ∈ univ, β a) : card_congr 
   ⟨λ f a ha, f a, λ f a, f a (mem_univ a), λ _, rfl, λ _, rfl⟩ 
 ... = univ.prod (λ a, card (β a)) : finset.card_pi _ _
 
-lemma card_arrow [fintype α] [decidable_eq α] [fintype β] [decidable_eq β] :
+lemma card_fun [fintype α] [decidable_eq α] [fintype β] [decidable_eq β] :
   card (α → β) = card β ^ card α :=
 by rw [card_pi, prod_const, nat.pow_eq_pow]; refl
 
@@ -101,7 +104,7 @@ by congr; assumption
 
 end set
 
-local attribute [instance] 
+local attribute [instance, priority 0] 
   classical.prop_decidable fintype.subtype_fintype set_fintype
 
 section should_be_in_group_theory
@@ -168,7 +171,7 @@ instance (f : group_action G α) (a : α) : is_subgroup (stabilizer f a) :=
     by rw [← hx, ← perm.mul_apply, ← is_group_hom.mul f, 
     inv_mul_self, is_group_hom.one f, perm.one_apply, hx] }
 
-noncomputable def orbit_equiv_left_cosets (a : α) (f : group_action G α) : 
+noncomputable lemma orbit_equiv_left_cosets (a : α) (f : group_action G α) : 
   orbit f a ≃ left_cosets (stabilizer f a) :=
 let I := left_rel (stabilizer f a) in
 { to_fun := λ b, @quotient.mk _ I (classical.some (mem_orbit_iff.1 b.2)),
@@ -217,8 +220,8 @@ end
 lemma mpl [fintype α] [fintype G] {p n : ℕ} (hp : nat.prime p) (h : card G = p ^ n)
   (f : group_action G α) : card α ≡ card (fixed_points f) [MOD p] :=
 have hcard : ∀ s : set α, card ↥{x : α | orbit f x = s} % p ≠ 0
-    ↔ card ↥{x : α | orbit f x = s} = 1 := λ s, ⟨λ hs, 
-  begin
+    ↔ card ↥{x : α | orbit f x = s} = 1 := 
+  λ s, ⟨λ hs, begin
     have h : ∃ y, orbit f y = s := by_contradiction (λ h, begin
       rw not_exists at h,
       have : {x | orbit f x = s} = ∅ := set.eq_empty_iff_forall_not_mem.2 h,
@@ -254,12 +257,12 @@ have h : (finset.univ.filter (λ a, card {x | orbit f x = a} % p ≠ 0)).sum
   ... = card (fixed_points f) : fintype.card_congr 
     (@equiv.of_bijective _ _ (show fixed_points f → {a : set α // card ↥{x : α | orbit f x = a} % p ≠ 0},
       from λ x, ⟨orbit f x.1, begin 
-        rw [hcard, fintype.card_eq_one_iff],
-        exact ⟨⟨x, rfl⟩, λ ⟨y, hy⟩, 
-          have hy : y ∈ orbit f x := (show orbit f y = orbit f x, from hy) ▸ mem_orbit_self _ _,
-          subtype.eq (mem_fixed_points.1 x.2 hy)⟩
-      end⟩) 
-      ⟨λ x y hxy,
+          rw [hcard, fintype.card_eq_one_iff],
+          exact ⟨⟨x, rfl⟩, λ ⟨y, hy⟩, 
+            have hy : y ∈ orbit f x := (show orbit f y = orbit f x, from hy) ▸ mem_orbit_self _ _,
+            subtype.eq (mem_fixed_points.1 x.2 hy)⟩
+        end⟩) 
+      ⟨λ x y hxy, 
         have hxy : orbit f x.1 = orbit f y.1 := subtype.mk.inj hxy,
         have hxo : x.1 ∈ orbit f y.1 := hxy ▸ mem_orbit_self _ _,
         subtype.eq (mem_fixed_points.1 y.2 hxo), 
@@ -269,8 +272,23 @@ have h : (finset.univ.filter (λ a, card {x | orbit f x = a} % p ≠ 0)).sum
         exact ⟨⟨x, mem_fixed_points.2 (λ y hy, 
           subtype.mk.inj (hx₂ ⟨y, by have := orbit_eq hy; simpa [this, hx₁] using hx₁⟩))⟩,
             by simpa using hx₁⟩
-       end⟩).symm,
+      end⟩).symm,
 calc card α % p = finset.sum finset.univ (λ a : set α, card {x // orbit f x = a}) % p : 
   by rw [card_congr (equiv_fib (orbit f)), fintype.card_sigma] 
 ... = _ : nat.sum_mod _ _ _
-... = card ↥(fixed_points f) % p : by rw ← h; congr
+... = fintype.card ↥(fixed_points f) % p : by rw ← h; congr
+
+def F (n : ℕ) (x : fin n → G) : fin (n+1) → G := 
+λ m, if h : m.1 < n then x ⟨m, h⟩ else ((fin_list n).map x).prod
+
+lemma F_injective {p : ℕ} (hp : 0 < p) : function.injective (@F G _ p) := 
+λ x y hxy, funext (λ ⟨a, ha⟩, begin
+  have := congr_fun hxy (fin.raise ⟨a, ha⟩),
+  have h : (fin.raise ⟨a, ha⟩).1 < p := ha,
+  unfold F at this,
+  split_ifs at this,
+  exact this,
+end)
+
+def H_star (n : ℕ) (H : set G) [is_subgroup H] := 
+F n '' (set.univ : set (fin n → H))
