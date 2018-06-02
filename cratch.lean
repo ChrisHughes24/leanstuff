@@ -1,4 +1,22 @@
-import analysis.metric_space
+import data.real.basic tactic.ring
+variables {I : Type*} (f : I → Type*)
+open real 
+example : (sqrt 2 + sqrt 3) ^ 2 = 5 + 2 * sqrt 6 :=
+begin
+  rw [pow_two, mul_add, add_mul, add_mul, ← pow_two, ← pow_two, sqr_sqrt, sqr_sqrt,
+    ← sqrt_mul, ← sqrt_mul],
+    ring,
+end
+
+lemma g : 0.71 + 0.8 = 0.51 := rfl
+#print g
+
+example : (ℕ → fin 0) → false := λ f, nat.not_lt_zero (f 0).1 (f 0).2
+
+instance semigroup1 [∀ i, semigroup $ f i] : semigroup (Π i : I, f i) :=
+{ mul := begin intros, admit end,
+mul_assoc := sorry
+}
 
 variables {α : Type*} {β : Type*}
 noncomputable theory

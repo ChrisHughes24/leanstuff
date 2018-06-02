@@ -12,7 +12,7 @@ def Zmod (n : ℕ) := subtype (< n)
 
 namespace Zmod
 
---Copied from core, but marked as private in core
+-- Copied from core, but marked as private in core
 lemma mlt {n b : nat} : ∀ {a}, n > a → b % n < n
 | 0     h := nat.mod_lt _ h
 | (a+1) h :=

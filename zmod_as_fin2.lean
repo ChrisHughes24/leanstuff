@@ -8,7 +8,7 @@ by conv {to_rhs, rw [← int.mod_add_div a b, neg_add, neg_mul_eq_mul_neg, int.a
 
 open nat nat.modeq int
 
-def Zmod (n : ℕ) := subtype (< n)
+def Zmod := fin
 
 namespace Zmod
 
@@ -24,6 +24,8 @@ class pos (n : ℕ) := (pos : 0 < n)
 attribute [class] nat.prime
 
 instance pos_of_prime (p : ℕ) [hp : nat.prime p] : pos p := ⟨hp.pos⟩
+
+instance succ_pos (n : ℕ) : pos (nat.succ n) := ⟨succ_pos _⟩
 
 def add_aux {n : ℕ} (a b : Zmod n) : Zmod n :=
 ⟨(a.1 + b.1) % n, mlt a.2⟩ 
@@ -43,25 +45,25 @@ end⟩
 
 instance (n : ℕ) : add_comm_semigroup (Zmod n) :=
 { add := add_aux,
-  add_assoc := λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, subtype.eq 
+  add_assoc := λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, fin.eq_of_veq 
     (show ((a + b) % n + c) ≡ (a + (b + c) % n) [MOD n], 
     from calc ((a + b) % n + c) ≡ a + b + c [MOD n] : modeq_add (nat.mod_mod _ _) rfl
       ... ≡ a + (b + c) [MOD n] : by rw add_assoc
       ... ≡ (a + (b + c) % n) [MOD n] : modeq_add rfl (nat.mod_mod _ _).symm),
-  add_comm := λ a b, subtype.eq (show (a.1 + b.1) % n = (b.1 + a.1) % n, by rw add_comm) }
+  add_comm := λ a b, fin.eq_of_veq (show (a.1 + b.1) % n = (b.1 + a.1) % n, by rw add_comm) }
 
 instance (n : ℕ) : comm_semigroup (Zmod n) :=
 { mul := mul_aux,
-  mul_assoc := λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, subtype.eq 
+  mul_assoc := λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, fin.eq_of_veq
     (calc ((a * b) % n * c) ≡ a * b * c [MOD n] : modeq_mul (nat.mod_mod _ _) rfl
       ... ≡ a * (b * c) [MOD n] : by rw mul_assoc
       ... ≡ a * (b * c % n) [MOD n] : modeq_mul rfl (nat.mod_mod _ _).symm),
-  mul_comm := λ a b, subtype.eq (show (a.1 * b.1) % n = (b.1 * a.1) % n, by rw mul_comm) }
+  mul_comm := λ a b, fin.eq_of_veq (show (a.1 * b.1) % n = (b.1 * a.1) % n, by rw mul_comm) }
 
 def one_aux (n : ℕ) [h0 : pos n] : Zmod n := ⟨1 % n, nat.mod_lt _ h0.pos⟩
 
 lemma one_mul_aux (n : ℕ) [h0 : pos n] : ∀ a : Zmod n, one_aux n * a = a := 
-λ ⟨a, ha⟩, subtype.eq (show (1 % n * a) % n = a, 
+λ ⟨a, ha⟩, fin.eq_of_veq (show (1 % n * a) % n = a, 
 begin
   resetI,
   clear _fun_match,
@@ -76,7 +78,7 @@ begin
 end)
 
 lemma left_distrib_aux (n : ℕ) : ∀ a b c : Zmod n, a * (b + c) = a * b + a * c :=
-λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, subtype.eq
+λ ⟨a, ha⟩ ⟨b, hb⟩ ⟨c, hc⟩, fin.eq_of_veq
 (calc a * ((b + c) % n) ≡ a * (b + c) [MOD n] : modeq_mul rfl (nat.mod_mod _ _)
   ... ≡ a * b + a * c [MOD n] : by rw mul_add
   ... ≡ (a * b) % n + (a * c) % n [MOD n] : modeq_add (nat.mod_mod _ _).symm (nat.mod_mod _ _).symm)
@@ -91,11 +93,11 @@ instance (n : ℕ) : distrib (Zmod n) :=
 
 instance (n : ℕ) [h0 : pos n] : comm_ring (Zmod n) :=
 { zero := ⟨0, h0.pos⟩,
-  zero_add := λ ⟨a, ha⟩, subtype.eq (show (0 + a) % n = a, by rw zero_add; exact nat.mod_eq_of_lt ha),
-  add_zero := λ ⟨a, ha⟩, subtype.eq (nat.mod_eq_of_lt ha),
+  zero_add := λ ⟨a, ha⟩, fin.eq_of_veq (show (0 + a) % n = a, by rw zero_add; exact nat.mod_eq_of_lt ha),
+  add_zero := λ ⟨a, ha⟩, fin.eq_of_veq (nat.mod_eq_of_lt ha),
   neg := has_neg.neg,
   add_left_neg := 
-    λ ⟨a, ha⟩, subtype.eq (show (((-a : ℤ) % n).to_nat + a) % n = 0,
+    λ ⟨a, ha⟩, fin.eq_of_veq (show (((-a : ℤ) % n).to_nat + a) % n = 0,
       from int.coe_nat_inj
       begin
         have hn : (n : ℤ) ≠ 0 := (ne_of_lt (int.coe_nat_lt.2 h0.pos)).symm,
@@ -192,26 +194,26 @@ instance (n : ℕ) [h0 : pos n] : comm_ring (Zmod n) :=
 -- @[simp] lemma coe_int_bit1 (n : ℕ+) (a : ℤ) : ((bit1 a : ℤ) : Zmod n) = bit1 (a : Zmod n) :=
 -- by rw [bit1, bit1, coe_int_add, coe_int_bit0, coe_int_one]
 
-def to_nat {n : ℕ} (a : Zmod n) : ℕ := a.1
+@[simp] lemma val_zero (n : ℕ) [h0 : pos n] : (0 : Zmod n).val = 0 := rfl
 
-lemma to_nat_lt {n : ℕ} (a : Zmod n) : a.to_nat < n := a.2
-
-@[simp] lemma to_nat_zero (n : ℕ) [h0 : pos n] : (0 : Zmod n).to_nat = 0 := rfl
-
-@[simp] lemma cast_to_nat {n : ℕ} [h0 : pos n] (a : ℕ) : (a : Zmod n).to_nat = a % n :=
+@[simp] lemma cast_val {n : ℕ} [h0 : pos n] (a : ℕ) : (a : Zmod n).val = a % n :=
 begin
   induction a with a ih,
   { rw [nat.zero_mod]; refl },
-  { show ((a : Zmod n).to_nat + 1 % n) % n = (a + 1) % n, 
+  { show ((a : Zmod n).val + 1 % n) % n = (a + 1) % n, 
     rw ih,
     exact nat.modeq.modeq_add (nat.mod_mod _ _) (nat.mod_mod _ _) }
 end 
 
 @[simp] lemma eq_zero (n : ℕ) [h0 : pos n] : (n : Zmod n) = 0 :=
-subtype.eq (show (n : Zmod n).to_nat = 0, by simp [cast_to_nat])
+fin.eq_of_veq (show (n : Zmod n).val = 0, by simp [cast_val])
 
 @[simp] lemma cast_nat_mod (n : ℕ) [h0 : pos n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
-subtype.eq (show ((a % n : ℕ) : Zmod n).to_nat = (a : Zmod n).to_nat, by simp)
+fin.eq_of_veq (show ((a % n : ℕ) : Zmod n).val = (a : Zmod n).val, by simp)
+
+instance (n : ℕ) : fintype (Zmod n) := fin.fintype _
+
+lemma card_Zmod : ∀ n, fintype.card (Zmod n) = n := fintype.card_fin
 
 -- @[simp] lemma cast_int_mod (n : ℕ) [h0 : pos n] (a : ℤ) : ((a % n : ℤ) : Zmod n) = a :=
 -- begin
