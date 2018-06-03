@@ -3,8 +3,7 @@ open equiv fintype finset
 universes u v w
 variables {G : Type u} {α : Type v} {β : Type w} [group G]
 
-def fin_list (n : ℕ) : list (fin n) := 
-  (list.range n).pmap (λ m hm, ⟨m, hm⟩) (λ m hm, list.mem_range.1 hm)
+instance fin_inhabited (n : ℕ) : inhabited (fin (n + 1)) := ⟨0⟩
 
 namespace finset
 
@@ -166,7 +165,7 @@ lemma one_apply [∀ i, has_one $ f i] (i : I) : (1 : Π i, f i) i = 1 := rfl
 end pi
 
 local attribute [instance, priority 0] 
-  classical.prop_decidable fintype.subtype_fintype set_fintype set.fintype_image
+  classical.prop_decidable fintype.subtype_fintype set_fintype
 
 section should_be_in_group_theory
 
@@ -177,6 +176,17 @@ lemma card_eq_card_cosets_mul_card_subgroup [fintype G] (H : set G) [is_subgroup
   card G = card (left_cosets H) * card H :=
 by rw ← card_prod;
   exact card_congr (is_subgroup.group_equiv_left_cosets_times_subgroup _)
+
+lemma order_of_dvd_of_pow_eq_one [fintype G] {a : G} {n : ℕ} (h : a ^ n = 1) :
+  order_of a ∣ n :=
+by_contradiction
+(λ h₁, nat.find_min _ (show n % order_of a < order_of a, 
+  from nat.mod_lt _ (nat.pos_of_ne_zero (order_of_ne_zero _))) 
+    ⟨mt nat.dvd_of_mod_eq_zero h₁, by rwa ← pow_eq_mod_order_of⟩)
+
+set_option trace.check true
+lemma eq_one_of_order_of_eq_one [fintype G] {a : G} (h : order_of a = 1) : a = 1 :=
+by conv {to_lhs, rw [← pow_one a, ← h, pow_order_of_eq_one] }
 
 end should_be_in_group_theory
 
@@ -189,6 +199,26 @@ instance : has_coe_to_fun (group_action G α) :=
   coe := λ x, x.val }
 
 instance group_action.is_group_hom (f : group_action G α) : is_group_hom f := f.2
+
+/-- restriction of a group action on a Type α to s, a set α -/
+def restriction {f : group_action G α} {s : set α}
+  (h : ∀ a ∈ s, ∀ x : G, f x a ∈ s) :
+  group_action G s :=
+⟨λ x : G, 
+  { to_fun := λ a, ⟨f x a, h a.1 a.2 x⟩,
+    inv_fun := λ a, ⟨f x⁻¹ a, h a.1 a.2 (x⁻¹)⟩,
+    left_inv := λ ⟨a, ha⟩, subtype.eq (show (f x⁻¹) ((f x) a) = a, 
+      by rw [← perm.mul_apply, ← is_group_hom.mul f, 
+        inv_mul_self, is_group_hom.one f, perm.one_apply]), 
+    right_inv := λ ⟨a, ha⟩, subtype.eq (show (f x) ((f x⁻¹) a) = a, 
+      by rw [← perm.mul_apply, ← is_group_hom.mul f, 
+        mul_inv_self, is_group_hom.one f, perm.one_apply])},
+  ⟨λ x y, equiv.ext _ _ (λ ⟨a, ha⟩, subtype.eq 
+    (show f (x * y) a = (f x * f y) a, by rw is_group_hom.mul f))⟩⟩
+
+lemma restriction_apply {f : group_action G α} {s : set α}
+  (h : ∀ a ∈ s, ∀ x : G, f x a ∈ s) (x : G) (a : s) :
+  f x a = (restriction h) x a := rfl
 
 def orbit (f : group_action G α) (a : α) := (λ x : G, f x a) '' set.univ
 
@@ -223,6 +253,21 @@ def stabilizer (f : group_action G α) (a : α) : set G :=
 lemma mem_stabilizer_iff {f : group_action G α} {a : α} {x : G} : 
   x ∈ stabilizer f a ↔ f x a = a := 
 iff.rfl
+
+lemma orbit_restriction {f : group_action G α} {s : set α} {a : s}
+  {h : ∀ a ∈ s, ∀ x, f x a ∈ s} {b : s} :
+  b ∈ orbit (restriction h) a ↔ (b : α) ∈ orbit f a :=
+⟨λ h, let ⟨x, hx⟩ := mem_orbit_iff.1 h in 
+  mem_orbit_iff.2 ⟨x, hx ▸ rfl⟩,
+λ h, let ⟨x, hx⟩ := mem_orbit_iff.1 h in 
+  mem_orbit_iff.2 ⟨x, subtype.eq hx⟩⟩
+
+lemma stabilizer_restriction {f : group_action G α} {s : set α} {a : s}
+  (h : ∀ a ∈ s, ∀ x, f x a ∈ s) :
+stabilizer (restriction h) a = stabilizer f a :=
+set.ext (λ x,by rw [mem_stabilizer_iff, mem_stabilizer_iff]; 
+  exact ⟨λ h, by conv {to_rhs, rw ← h}; refl, 
+  λ h, subtype.eq h⟩)
 
 instance (f : group_action G α) (a : α) : is_subgroup (stabilizer f a) :=
 { one_mem := show f 1 a = a, by rw [is_group_hom.one f, perm.one_apply],
@@ -265,6 +310,13 @@ lemma mem_fixed_points {f : group_action G α} {x : α} : x ∈ fixed_points f �
   (∀ {y}, y ∈ orbit f x → y = x) := 
 ⟨λ h y h₁, let ⟨a, ha⟩ := mem_orbit_iff.1 h₁ in ha ▸ h a, 
 λ h x, mem_stabilizer_iff.2 (h (mem_orbit _ _ _))⟩
+
+lemma fixed_points_restriction {f : group_action G α} {s : set α}
+  (h : ∀ a ∈ s, ∀ x, f x a ∈ s) {a : s} : 
+  a ∈ fixed_points (restriction h) ↔ (a : α) ∈ fixed_points f :=
+show (∀ x, x ∈ stabilizer (restriction h) a) ↔
+  (∀ x, x ∈ stabilizer f a),
+by rw stabilizer_restriction h; refl
 
 lemma card_orbit_of_mem_fixed_point {f : group_action G α} {x : α} [fintype (orbit f x)] : 
   x ∈ fixed_points f ↔ card (orbit f x) = 1 := 
@@ -343,37 +395,68 @@ calc card α % p = finset.sum finset.univ (λ a : set α, card {x // orbit f x =
 namespace sylow
 
 def F₁ (n : ℕ) [Zmod.pos n] (v : Zmod n → G) : Zmod (n+1) → G := 
-λ m, if h : m.1 < n then v ⟨m.1, h⟩ else ((fin_list n).map v).prod⁻¹
+λ m, if h : m.1 < n then v m.1 else ((list.range n).map (λ m : ℕ, v (m : Zmod n))).prod⁻¹
 
-lemma F₁_injective {p : ℕ} [Zmod.pos p] : function.injective (@F₁ G _ p _) := 
+lemma F₁_injective {p : ℕ} [h0 : Zmod.pos p] : function.injective (@F₁ G _ p _) := 
 λ x y hxy, funext (λ ⟨a, ha⟩, begin
-  have := congr_fun hxy (fin.raise ⟨a, ha⟩),
-  have h : (fin.raise ⟨a, ha⟩).1 < p := ha,
-  unfold F₁ at this,
-  split_ifs at this,
-  exact this
+  have : dite _ _ _ = dite _ _ _ := congr_fun hxy a,
+  rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_of_lt ha), 
+    dif_pos ha, dif_pos ha] at this,
+  rwa Zmod.mk_eq_cast
 end)
 
-def Gstar (G : Type*) [group G] (n : ℕ) [Zmod.pos n] : set (Zmod (n + 1) → G) := 
-F₁ n '' (set.univ : set (Zmod n → G))
+/-- set of elements of G^n such that the product of the 
+  list of elements of the vector is one -/
+def Gstar (G : Type*) [group G] (n : ℕ) [Zmod.pos n] : set (Zmod n → G) := 
+{v | ((list.range n).map (λ m : ℕ, v (↑m : Zmod n))).prod = 1 }
 
-lemma mem_Gstar (n : ℕ) [Zmod.pos n] (v : Zmod (n + 1) → G) (hv : v ∈ Gstar G n) :
-((fin_list (n + 1)).map x).prod = 1 := begin
+lemma prod_lemma (n : ℕ) [Zmod.pos n] (v : Zmod (n + 1) → G) :
+  ((list.range (n + 1)).map (λ m : ℕ, v (m : Zmod (n + 1)))).prod =
+  list.prod (list.map (λ (m : ℕ), v ↑m) (list.range n)) * v ↑n :=
+by rw [list.range_concat, list.map_append, list.prod_append,
+  list.map_singleton, list.prod_cons, list.prod_nil, mul_one]
 
-
-end
-
+lemma mem_Gstar_iff {n : ℕ} [Zmod.pos n] (v : Zmod (n + 1) → G) :
+  v ∈ Gstar G (n + 1) ↔ v ∈ F₁ n '' (set.univ : set (Zmod n → G)) :=
+⟨λ h : list.prod (list.map (λ (m : ℕ), v ↑m) (list.range (n + 1))) = 1, 
+  have h₁ : list.map (λ (m : ℕ), v ((m : Zmod n).val : Zmod (n+1))) (list.range n)
+    = list.map (λ (m : ℕ), v m) (list.range n) := list.map_congr (λ m hm, 
+  have hm' : m < n := list.mem_range.1 hm,  
+    by simp[nat.mod_eq_of_lt hm']),
+⟨λ m, v m.val, set.mem_univ _, funext (λ i, show dite _ _ _ = _, begin
+  split_ifs,
+  { refine congr_arg _ (fin.eq_of_veq _), 
+    simp [nat.mod_eq_of_lt h_1, nat.mod_eq_of_lt (nat.lt_succ_of_lt h_1)] },
+  { have hi : i = n := fin.eq_of_veq begin 
+      rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)],
+      exact le_antisymm (nat.le_of_lt_succ i.2) (le_of_not_gt h_1),
+    end,
+    rw [h₁, hi, inv_eq_iff_mul_eq_one, ← prod_lemma, h] }
+end)⟩,
+λ ⟨w, hw⟩, 
+have h : list.map (λ m : ℕ, w m) (list.range n) = list.map (λ m : ℕ, v m) (list.range n) :=
+list.map_congr (λ k hk, 
+  have hk' : k < n := list.mem_range.1 hk,
+  hw.2 ▸ (show _ = dite _ _ _, 
+    by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_of_lt hk'), dif_pos hk'])),
+begin
+  show list.prod (list.map (λ (m : ℕ), v ↑m) (list.range (n + 1))) = 1,
+  rw [prod_lemma, ← h, ← hw.2],
+  show _ * dite _ _ _ = (1 : G),
+  rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _), dif_neg (lt_irrefl _),
+    mul_inv_self],
+end⟩
 
 def F₂ (α : Type*) (n : ℕ) [h0 : Zmod.pos n] : 
-  group_action (multiplicative (Zmod (n + 1))) (Gstar G n) :=
-⟨λ a : Zmod (n + 1), 
-  { to_fun := λ v, begin end ,
-    inv_fun := λ (v : Zmod n → α) (m : Zmod n), v (m - a),
+  group_action (multiplicative (Zmod n)) (Zmod n → α) :=
+⟨λ i : Zmod n, 
+  { to_fun := λ v m, v (m + i),
+    inv_fun := λ v m, v (m - i),
     left_inv := λ v, by simp,
-    right_inv := λ v : Zmod n → α, show (λ (m : Zmod n), v (m + a - a)) = v, 
+    right_inv := λ v : Zmod n → α, show (λ m : Zmod n, v (m + i - i)) = v, 
       from funext (λ m, by rw add_sub_cancel) }, 
-⟨λ a b : Zmod n, equiv.ext _ _ (λ x : Zmod n → α, 
-  funext (λ m : Zmod n, show x (m + (a + b)) = x (m + a + b),
+⟨λ i j : Zmod n, equiv.ext _ _ (λ x : Zmod n → α, 
+  funext (λ m : Zmod n, show x (m + (i + j)) = x (m + i + j),
     by rw add_assoc))⟩⟩
 
 lemma fixed_points_F₂_eq_const {n : ℕ} [h0 : Zmod.pos n] {v : Zmod n → G}
@@ -381,20 +464,80 @@ lemma fixed_points_F₂_eq_const {n : ℕ} [h0 : Zmod.pos n] {v : Zmod n → G}
 calc v i = v (j + i) : add_comm i j ▸ (congr_fun ((mem_fixed_points.1 h) (mem_orbit (F₂ G n) v j)) i).symm
 ... = v j : congr_fun ((mem_fixed_points.1 h) (mem_orbit (F₂ G n) v i)) j
 
-lemma fixed_points_F₂_pow_n [fintype G] {n : ℕ} (hn : nat.prime (n + 1))
-  [h0 : Zmod.pos n]
-  {v : Zmod (n+1) → G} (hv : v ∈ Gstar G n)
-  (h : v ∈ fixed_points (F₂ G (n + 1))) : v 0 ^ (n + 1) = 1 :=
-let ⟨w, hw⟩ := hv in
+lemma map_succ_range : ∀ n : ℕ, list.range (nat.succ n) = 0 :: (list.range n).map nat.succ
+| 0 := rfl
+| (n+1) := by rw [list.range_concat, list.range_concat, list.map_append,
+  ← list.cons_append, ← map_succ_range, list.range_concat, list.map_singleton]
+
+open nat
+
+lemma list.prod_const [monoid α] : ∀ {l : list α} {a : α}, (∀ b ∈ l, b = a) → l.prod = a ^ l.length
+| [] := λ _ _, rfl
+| (b::l) := λ a ha,
+have h : ∀ b ∈ l, b = a := λ b hb, ha b (list.mem_cons_of_mem _ hb),
+have hb : b = a := ha b (list.mem_cons_self _ _),
+by simp [_root_.pow_add, list.prod_const h, hb]
+
+lemma F₂_on_Gstar {n : ℕ} [h0 : Zmod.pos n] {v : Zmod (succ n) → G} (i : Zmod (succ n)) 
+  (hv : v ∈ Gstar G (succ n)) :
+  (F₂ G (succ n)) (i : Zmod (succ n)) v ∈ Gstar G (succ n) :=
 begin
-  have h₁ : dite _ _ _ = _ := congr_fun hw.2 ⟨n, nat.lt_succ_self n⟩,
+  cases i with i hi,
+  rw Zmod.mk_eq_cast,
+  clear hi,
+  induction i with i ih,
+  { show list.prod (list.map (λ (m : ℕ), v (m + 0)) (list.range (succ n))) = 1,
+    simpa },
+  { show list.prod (list.map (λ (m : ℕ), v (m + (i + 1))) (list.range (succ n))) = 1,
+    replace ih : list.prod (list.map (λ (m : ℕ), v (m + i)) (list.range (succ n))) = 1 := ih, 
+    rw [list.range_concat, list.map_append, list.prod_append, list.map_singleton, 
+      list.prod_cons, list.prod_nil, mul_one] at ⊢ ih,
+    have h : list.map (λ m : ℕ, v (↑m + (i + 1))) (list.range n) =
+      list.map (λ m : ℕ, v (m + i)) (list.map (λ m : ℕ, m + 1) (list.range n)),
+    { simp [list.map_map, function.comp] },
+    resetI,
+    cases n,
+    { exact (lt_irrefl 0 h0.pos).elim },
+    { have h : list.map (λ m : ℕ, v (↑m + (i + 1))) (list.range n) =
+        list.map (λ m : ℕ, v (m + i)) (list.map succ (list.range n)),
+      { simp [list.map_map, function.comp] },
+      have h₁ : (succ n : Zmod (succ (succ n))) + (↑i + 1) = i,
+      { rw [add_left_comm, ← nat.cast_one, ← nat.cast_add, Zmod.cast_self_eq_zero, add_zero] },
+      have h₂ : (n : Zmod (succ (succ n))) + i + 1 = succ n + i := by simp [succ_eq_add_one],
+      rw [map_succ_range, list.map_cons, list.prod_cons, ← h, nat.cast_zero, zero_add] at ih,
+      have := eq_inv_mul_of_mul_eq ih,
+      rw [list.range_concat, list.map_append, list.map_singleton, list.prod_append,
+        list.prod_cons, list.prod_nil, mul_one, ← add_assoc, h₁, h₂, this],
+      simp } }
+end
+
+def F₂Gstar (G : Type u) [group G] (n : ℕ) [Zmod.pos n] : 
+  group_action (multiplicative (Zmod (succ n))) (Gstar G (succ n)) :=
+restriction (λ v hv i, F₂_on_Gstar i hv)
+
+lemma fixed_points_F₂_pow_n [fintype G] {n : ℕ} (hn : nat.prime (succ n))
+  [h0 : Zmod.pos n]
+  {v : Gstar G (succ n)}
+  (hv : v ∈ fixed_points (F₂Gstar G n)) : (v : Zmod (succ n) → G) 0 ^ (n + 1) = 1 :=
+let ⟨w, hw⟩ := (mem_Gstar_iff _).1 v.2 in
+have hv' : (v : Zmod (succ n) → G) ∈ _ := ((fixed_points_restriction _).1 hv),
+begin
+  have h₁ : dite _ _ _ = (v : Zmod (succ n) → G) _ := congr_fun hw.2 ⟨n, nat.lt_succ_self n⟩,
   rw dif_neg (lt_irrefl _) at h₁,
-  have h₂ : dite (0 < n) _ _ = _ := congr_fun hw.2 0,
-  have h₂ : w 0 = v 0 := by rwa dif_pos h0.pos at h₂,
+  have h₂ : ∀ b, b < n → w b = (v : Zmod (succ n) → G) b := λ b hb, begin
+    have : dite _ _ _ = _ := congr_fun hw.2 b,
+    rwa [Zmod.cast_val_of_lt (lt_succ_of_lt hb), dif_pos hb] at this,
+  end,
+  have hb : ∀ (b : G), b ∈ list.map (λ (m : ℕ), w ↑m) (list.range n) → b = w 0 := λ b hb,
+    let ⟨i, hi⟩ := list.mem_map.1 hb in
+    by rw [← hi.2, h₂ _ (list.mem_range.1 hi.1), fixed_points_F₂_eq_const 
+      ((fixed_points_restriction _).1 hv) _ 0];
+      exact (h₂ 0 h0.pos).symm,
   refine (@mul_left_inj _ _ (w 0 ^ (-n : ℤ)) _ _).1 _,
-  conv { to_rhs, rw [h₁, fixed_points_F₂_eq_const h _ 0] },
-  rw [← h₂, ← gpow_coe_nat, ← gpow_add],
-  simp
+  rw [@list.prod_const _ _ _ (w 0) hb, list.length_map, list.length_range, ← gpow_coe_nat, ← gpow_neg] at h₁,
+  conv { to_rhs, rw [h₁, fixed_points_F₂_eq_const hv' _ 0] },
+  rw [← nat.cast_zero, h₂ 0 h0.pos, nat.cast_zero, ← gpow_coe_nat, ← gpow_add, int.coe_nat_add],
+  simp,
 end
 
 lemma one_mem_fixed_points_F₂ [fintype G] {n : ℕ} [h0 : Zmod.pos n] :
@@ -404,6 +547,12 @@ mem_fixed_points.2 (λ y hy, funext (λ j,
   have hj : (1 : G) = y j := congr_fun hi j,
     hj ▸ rfl))
 
+lemma one_mem_Gstar (n : ℕ) [Zmod.pos n] : (1 : Zmod n → G) ∈ Gstar G n :=
+show list.prod (list.map (λ (m : ℕ), (1 : G)) (list.range n)) = 1,
+from have h : ∀ b : G, b ∈ list.map (λ (m : ℕ), (1 : G)) (list.range n) → b = 1 :=
+λ b hb, let ⟨_, h⟩ := list.mem_map.1 hb in h.2.symm,
+by simp [list.prod_const h]
+
 attribute [trans] dvd.trans
 
 lemma exists_prime_order_of_dvd_card [fintype G] {p : ℕ} (hp : nat.prime p)
@@ -411,92 +560,51 @@ lemma exists_prime_order_of_dvd_card [fintype G] {p : ℕ} (hp : nat.prime p)
 let n := p - 1 in
 have hn : p = n + 1 := nat.succ_sub hp.pos,
 have hnp : nat.prime (n + 1) := hn ▸ hp,
-by haveI hn0 : Zmod.pos n := ⟨nat.lt_of_succ_lt_succ hnp.gt_one⟩; exact
+have hn0 : Zmod.pos n := ⟨nat.lt_of_succ_lt_succ hnp.gt_one⟩,
 have hlt : ¬(n : Zmod (n + 1)).val < n :=
   not_lt_of_ge (by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)]; 
     exact le_refl _),
-have hcard1 : card (Gstar G n) = card (Zmod n → G) := 
-  set.card_univ (Zmod n → G) ▸ set.card_image_of_injective 
-    _ F_injective,
-have hcard : card (Gstar G n) = card G ^ n :=
+have hcard1 : card (Gstar G (n + 1)) = card (Zmod n → G) := 
+  by rw [← set.card_univ (Zmod n → G), set.ext (@mem_Gstar_iff _ _ _ hn0), 
+    set.card_image_of_injective _ F₁_injective],
+have hcard : card (Gstar G (n + 1)) = card G ^ n :=
   by conv { rw hcard1, to_rhs, rw ← card_fin n };
     exact fintype.card_fun,
 have hZmod : @fintype.card (multiplicative (Zmod (n+1))) (fin.fintype _) = 
   (n+1) ^ 1 := (nat.pow_one (n + 1)).symm ▸ card_fin _,
-have hmodeq : _ = _ := mpl hnp hZmod (F₂ (Gstar G n) (n + 1)),
-have hdvdcard : (n + 1) ∣ card (Zmod (n + 1) → (Gstar G n)) :=
+have hmodeq : _ = _ := mpl hnp hZmod (@F₂Gstar G _ n hn0),
+have hdvdcard : (n + 1) ∣ card (Gstar G (n + 1)) :=
   calc (n + 1) = p : hn.symm
   ... ∣ card G ^ 1 : by rwa nat.pow_one
   ... ∣ card G ^ n : nat.pow_dvd_pow _ hn0.pos
-  ... = card (Gstar G n) : hcard.symm
-  ... ∣ card (Zmod (n + 1) → (Gstar G n)) : 
-    by rw [fintype.card_fun, Zmod.card_Zmod, nat.pow_add, nat.pow_one];
-      exact dvd_mul_left _ _,
-have hdvdcard₂ : (n + 1) ∣ card (fixed_points (F₂ (Gstar G n) (n + 1))) :=
+  ... = card (Gstar G (n + 1)) : hcard.symm,
+have hdvdcard₂ : (n + 1) ∣ card (fixed_points (@F₂Gstar G _ n hn0)) :=
   nat.dvd_of_mod_eq_zero (hmodeq ▸ (nat.mod_eq_zero_of_dvd hdvdcard)),
-have hcard_pos : 0 < card (fixed_points (F₂ (Gstar G n) (n + 1))) :=
-  fintype.card_pos ⟨1, one_mem_fixed_points_F₂⟩,
-have hle : 1 < card (fixed_points (F₂ (Gstar G n) (n + 1))) :=
+have hcard_pos : 0 < card (fixed_points (@F₂Gstar G _ n hn0)) :=
+  fintype.card_pos ⟨⟨(1 : Zmod (succ n) → G), one_mem_Gstar _⟩, 
+    (fixed_points_restriction _).2 (one_mem_fixed_points_F₂)⟩,
+have hle : 1 < card (fixed_points (@F₂Gstar G _ n hn0)) :=
   calc 1 < n + 1 : hnp.gt_one
   ... ≤ _ : nat.le_of_dvd hcard_pos hdvdcard₂,
-let ⟨⟨x, hx⟩, hx₁⟩ := classical.not_forall.1 (mt fintype.card_le_one_iff.2 (not_le_of_gt hle)) in
-let ⟨⟨y, hy⟩, hy₁⟩ := classical.not_forall.1 hx₁ in
-have hxy : x ≠ 1 ∨ y ≠ 1 := or_iff_not_imp_left.2 
-  (λ hx1 hy1, hy₁ (by simp [hy1, not_not.1 hx1])),
+let ⟨⟨x, hx₁⟩, hx₂⟩ := classical.not_forall.1 (mt fintype.card_le_one_iff.2 (not_le_of_gt hle)) in
+let ⟨⟨y, hy₁⟩, hy₂⟩ := classical.not_forall.1 hx₂ in
+have hxy : (x : Zmod (succ n) → G) 0 ≠ 1 ∨ (y : Zmod (succ n) → G) 0 ≠ 1 := 
+  or_iff_not_imp_left.2 
+  (λ hx1 hy1, hy₂ (subtype.eq (subtype.eq (funext (λ i, 
+  show (x : Zmod (succ n) → G) i = (y : Zmod (succ n) → G) i,
+  by rw [fixed_points_F₂_eq_const ((fixed_points_restriction _).1 hy₁) i 0, hy1,
+        fixed_points_F₂_eq_const ((fixed_points_restriction _).1 hx₁) i 0, not_not.1 hx1]))))),
+have hxp : (x : Zmod (succ n) → G) 0 ^ (n + 1) = 1 := @fixed_points_F₂_pow_n _ _ _ _ hnp hn0 _ hx₁,
+have hyp : (y : Zmod (succ n) → G) 0 ^ (n + 1) = 1 := @fixed_points_F₂_pow_n _ _ _ _ hnp hn0 _ hy₁,
 begin
-  clear _let_match hx₁ hy₁,
   rw hn,
-  wlog h : x ≠ 1 using x y,
-  { exact hxy },
-  { existsi (x 0).1,
-    refine le_antisymm (nat.find_min' _ ⟨dec_trivial, _⟩) _,
-     }
+  cases hxy with hx hy,
+  { existsi (x : Zmod (succ n) → G) 0,
+    exact or.resolve_left (hnp.2 _ (order_of_dvd_of_pow_eq_one hxp)) 
+      (λ h, hx (eq_one_of_order_of_eq_one h)) },
+  { existsi (y : Zmod (succ n) → G) 0,
+    exact or.resolve_left (hnp.2 _ (order_of_dvd_of_pow_eq_one hyp)) 
+      (λ h, hy (eq_one_of_order_of_eq_one h)) }
 end
 
-
--- lemma exists_prime_order_of_dvd_card [fintype G] {p : ℕ} (hp : nat.prime p)
---   (hdvd : p ∣ card G) : ∃ x : G, order_of x = p :=
--- let n := p - 1 in
--- have hn : p = n + 1 := nat.succ_sub hp.pos,
--- have hnp : nat.prime (n + 1) := hn ▸ hp,
--- by haveI : Zmod.pos n := ⟨nat.lt_of_succ_lt_succ hnp.gt_one⟩; exact
--- have hlt : ¬(n : Zmod (n + 1)).val < n :=
---   not_lt_of_ge (by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)]; 
---     exact le_refl _),
--- have hcard1 : card (Gstar G n) = card (Zmod n → G) := 
---   set.card_univ (Zmod n → G) ▸ set.card_image_of_injective 
---     _ F_injective,
--- have hcard : card (Gstar G n) = card G ^ n :=
---   by conv { rw hcard1, to_rhs, rw ← card_fin n };
---     exact fintype.card_fun,
--- have hZmod : @fintype.card (multiplicative (Zmod (n+1))) (fin.fintype _) = 
---   (n+1) ^ 1 := (nat.pow_one (n + 1)).symm ▸ card_fin _,
--- have hmodeq : _ = _ := mpl hnp hZmod (F₂ G (n + 1)),
--- have hdvdcard : (n + 1) ∣ card (Zmod (n + 1) → G) :=
---   calc (n + 1) = p : hn.symm
---   ... ∣ card G : hdvd
---   ... ∣ card G * card G ^ n : dvd_mul_right _ _
---   ... = card (Zmod (n + 1) → G) :
---     by simp [fintype.card_fun, Zmod.card_Zmod, mul_comm, nat.pow_add],
--- have hdvdcard₂ : (n + 1) ∣ card (fixed_points (F₂ G (n + 1))) :=
---   nat.dvd_of_mod_eq_zero (hmodeq ▸ (nat.mod_eq_zero_of_dvd hdvdcard)),
--- have hcard_pos : 0 < card (fixed_points (F₂ G (n + 1))) :=
---   fintype.card_pos ⟨1, one_mem_fixed_points_F₂⟩,
--- have hle : 1 < card (fixed_points (F₂ G (n + 1))) :=
---   calc 1 < n + 1 : hnp.gt_one
---   ... ≤ _ : nat.le_of_dvd hcard_pos hdvdcard₂,
--- let ⟨⟨x, hx⟩, hx₁⟩ := classical.not_forall.1 (mt fintype.card_le_one_iff.2 (not_le_of_gt hle)) in
--- let ⟨⟨y, hy⟩, hy₁⟩ := classical.not_forall.1 hx₁ in
--- have hxy : x ≠ 1 ∨ y ≠ 1 := or_iff_not_imp_left.2 
---   (λ hx1 hy1, hy₁ (by simp [hy1, not_not.1 hx1])),
--- begin
---   clear _let_match hx₁ hy₁,
---   rw hn,
---   wlog h : x ≠ 1 using x y,
---   { exact hxy },
---   { existsi x 0,
---     refine le_antisymm (nat.find_min' _ ⟨dec_trivial, _⟩) _,
---      }
--- end
--- #print subsingleton
 end sylow

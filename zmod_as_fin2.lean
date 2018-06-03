@@ -203,10 +203,16 @@ begin
   { show ((a : Zmod n).val + 1 % n) % n = (a + 1) % n, 
     rw ih,
     exact nat.modeq.modeq_add (nat.mod_mod _ _) (nat.mod_mod _ _) }
-end 
+end
 
-@[simp] lemma eq_zero (n : ℕ) [h0 : pos n] : (n : Zmod n) = 0 :=
+lemma mk_eq_cast {a n : ℕ} (h : a < n) [pos n] : (⟨a, h⟩ : Zmod n) = (a : Zmod n) :=
+fin.eq_of_veq (by rw [cast_val, nat.mod_eq_of_lt h])
+
+@[simp] lemma cast_self_eq_zero (n : ℕ) [h0 : pos n] : (n : Zmod n) = 0 :=
 fin.eq_of_veq (show (n : Zmod n).val = 0, by simp [cast_val])
+
+lemma cast_val_of_lt {a n : ℕ} (h : a < n) [pos n] : (a : Zmod n).val = a :=
+by rw [cast_val, nat.mod_eq_of_lt h]
 
 @[simp] lemma cast_nat_mod (n : ℕ) [h0 : pos n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
 fin.eq_of_veq (show ((a % n : ℕ) : Zmod n).val = (a : Zmod n).val, by simp)
