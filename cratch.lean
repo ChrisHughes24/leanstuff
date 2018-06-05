@@ -1,4 +1,56 @@
-import data.real.basic tactic.ring
+import group_theory.coset
+variables {G : Type*} [group G]
+
+def normalizer (H : set G) : set G :=
+{ g : G | ∀ n, n ∈ H ↔ g * n * g⁻¹ ∈ H }
+
+instance (H : set G) [is_subgroup H] : is_subgroup (normalizer H) :=
+{ one_mem := show ∀ n : G, n ∈ H ↔ 1 * n * 1⁻¹ ∈ H, by simp,
+  mul_mem := λ a b (ha : ∀ n, n ∈ H ↔ a * n * a⁻¹ ∈ H)
+    (hb : ∀ n, n ∈ H ↔ b * n * b⁻¹ ∈ H) n,
+    by rw [mul_inv_rev, ← mul_assoc, mul_assoc a, mul_assoc a, ← ha, hb],
+  inv_mem := λ a (ha : ∀ n, n ∈ H ↔ a * n * a⁻¹ ∈ H) n,
+    by rw [ha (a⁻¹ * n * a⁻¹⁻¹)];
+    simp [mul_assoc] }
+
+lemma subset_normalizer (H : set G) [is_subgroup H] : H ⊆ normalizer H :=
+λ g hg n, by rw [is_subgroup.mul_mem_cancel_left _ ((is_subgroup.inv_mem_iff _).2 hg),
+  is_subgroup.mul_mem_cancel_right _ hg]
+
+instance (H : set G) [is_subgroup H] : normal_subgroup {x : normalizer H | ↑x ∈ H} :=
+{ one_mem := show (1 : G) ∈ H, from is_submonoid.one_mem _,
+  mul_mem := λ a b ha hb, show (a * b : G) ∈ H, from is_submonoid.mul_mem ha hb,
+  inv_mem := λ a ha, show (a⁻¹ : G) ∈ H, from is_subgroup.inv_mem ha, 
+  normal := λ a ha ⟨m, hm⟩, (hm a).1 ha }
+
+local attribute [instance] left_rel normal_subgroup.to_is_subgroup
+
+instance : group (left_cosets H) :=
+{ one := ⟦1⟧,
+  mul := λ a b, quotient.lift_on₂ a b 
+  (λ a b, ⟦a * b⟧) 
+  (λ a₁ a₂ b₁ b₂ (hab₁ : a₁⁻¹ * b₁ ∈ H) (hab₂ : a₂⁻¹ * b₂ ∈ H), 
+    quotient.sound 
+    ((is_subgroup.mul_mem_cancel_left H (is_subgroup.inv_mem hab₂)).1
+        (by rw [mul_inv_rev, mul_inv_rev, ← mul_assoc (a₂⁻¹ * a₁⁻¹),
+          mul_assoc _ b₂, ← mul_assoc b₂, mul_inv_self, one_mul, mul_assoc (a₂⁻¹)];
+          exact normal_subgroup.normal _ hab₁ _))),
+  mul_assoc := λ a b c, quotient.induction_on₃ 
+    a b c (λ a b c, show ⟦_⟧ = ⟦_⟧, by rw mul_assoc),
+  one_mul := λ a, quotient.induction_on a
+    (λ a, show ⟦_⟧ = ⟦_⟧, by rw one_mul),
+  mul_one := λ a, quotient.induction_on a
+    (λ a, show ⟦_⟧ = ⟦_⟧, by rw mul_one),
+  inv := λ a, quotient.lift_on a (λ a, ⟦a⁻¹⟧)
+    (λ a b hab, quotient.sound begin 
+      show a⁻¹⁻¹ * b⁻¹ ∈ H,
+      rw ← mul_inv_rev,
+      exact is_subgroup.inv_mem (is_subgroup.mem_norm_comm hab)
+    end),
+  mul_left_inv := λ a, quotient.induction_on a
+    (λ a, show ⟦_⟧ = ⟦_⟧, by rw inv_mul_self) }
+
+
 variables {I : Type*} (f : I → Type*)
 open real 
 example : (sqrt 2 + sqrt 3) ^ 2 = 5 + 2 * sqrt 6 :=

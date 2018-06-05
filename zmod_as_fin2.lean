@@ -194,9 +194,9 @@ instance (n : ℕ) [h0 : pos n] : comm_ring (Zmod n) :=
 -- @[simp] lemma coe_int_bit1 (n : ℕ+) (a : ℤ) : ((bit1 a : ℤ) : Zmod n) = bit1 (a : Zmod n) :=
 -- by rw [bit1, bit1, coe_int_add, coe_int_bit0, coe_int_one]
 
-@[simp] lemma val_zero (n : ℕ) [h0 : pos n] : (0 : Zmod n).val = 0 := rfl
+@[simp] lemma val_zero (n : ℕ) [pos n] : (0 : Zmod n).val = 0 := rfl
 
-@[simp] lemma cast_val {n : ℕ} [h0 : pos n] (a : ℕ) : (a : Zmod n).val = a % n :=
+@[simp] lemma cast_val {n : ℕ} [pos n] (a : ℕ) : (a : Zmod n).val = a % n :=
 begin
   induction a with a ih,
   { rw [nat.zero_mod]; refl },
@@ -208,23 +208,25 @@ end
 lemma mk_eq_cast {a n : ℕ} (h : a < n) [pos n] : (⟨a, h⟩ : Zmod n) = (a : Zmod n) :=
 fin.eq_of_veq (by rw [cast_val, nat.mod_eq_of_lt h])
 
-@[simp] lemma cast_self_eq_zero (n : ℕ) [h0 : pos n] : (n : Zmod n) = 0 :=
+@[simp] lemma cast_self_eq_zero (n : ℕ) [pos n] : (n : Zmod n) = 0 :=
 fin.eq_of_veq (show (n : Zmod n).val = 0, by simp [cast_val])
 
 lemma cast_val_of_lt {a n : ℕ} (h : a < n) [pos n] : (a : Zmod n).val = a :=
 by rw [cast_val, nat.mod_eq_of_lt h]
 
-@[simp] lemma cast_nat_mod (n : ℕ) [h0 : pos n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
+@[simp] lemma cast_nat_mod (n : ℕ) [pos n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
 fin.eq_of_veq (show ((a % n : ℕ) : Zmod n).val = (a : Zmod n).val, by simp)
+
+@[simp] lemma cast_int_mod (n : ℕ) [pos n] (a : ℤ) : ((a % n : ℤ) : Zmod n) = a :=
+begin
+  
+end
 
 instance (n : ℕ) : fintype (Zmod n) := fin.fintype _
 
 lemma card_Zmod : ∀ n, fintype.card (Zmod n) = n := fintype.card_fin
 
--- @[simp] lemma cast_int_mod (n : ℕ) [h0 : pos n] (a : ℤ) : ((a % n : ℤ) : Zmod n) = a :=
--- begin
-  
--- end
+
 
 -- lemma eq_zero_iff_dvd_nat (n : ℕ) [h0 : pos n] (a : ℕ) : (a : Zmod n) = 0 ↔ (n : ℕ) ∣ a := 
 -- ⟨begin end, sorry⟩
