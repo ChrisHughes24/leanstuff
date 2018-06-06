@@ -274,7 +274,7 @@ instance (H : set G) [is_subgroup H] : normal_subgroup { x : normalizer H | ↑x
 lemma mem_normalizer_fintype_iff {H : set G} [fintype H] {x : G} : 
   x ∈ normalizer H ↔ ∀ n, n ∈ H → x * n * x⁻¹ ∈ H :=
 ⟨λ h n, (h n).1,
-λ h n, ⟨h n, λ h₁, 
+λ h n, ⟨h n, λ h₁,
 have hsubs₁ : (λ n, x * n * x⁻¹) '' H ⊆ H := λ n ⟨y, hy⟩, hy.2 ▸ h y hy.1,
 have hcard : card ((λ (n : G), x * n * x⁻¹) '' H) = card H :=
   set.card_image_of_injective H (λ a₁ a₂ ha, (mul_left_inj x).1 ((mul_right_inj (x⁻¹)).1 ha)),
@@ -287,14 +287,6 @@ begin
   have : m = n, from (mul_left_inj x).1 ((mul_right_inj (x⁻¹)).1 hm.2),
   exact this ▸ hm.1  
 end⟩ ⟩
-
-lemma inv_mem_normalizer_iff {H : set G} [fintype H] {x : G} :
-  x ∈ normalizer H ↔ x⁻¹ ∈ normalizer H :=
-have ∀ {x}, x ∈ normalizer H → x⁻¹ ∈ normalizer H := λ x h,
- mem_normalizer_fintype_iff.2 (λ n hn, by have := h (x⁻¹ * n * x);
-  simp [*, mul_assoc] at *),
-⟨this, λ h, by rw ← inv_inv x; exact this h⟩ 
-
 
 end should_be_in_group_theory
 
@@ -714,7 +706,7 @@ begin
 end
 
 local attribute [instance] left_rel
-
+open is_subgroup is_submonoid
 def thing (H : set G) [is_subgroup H] : group_action H (left_cosets H) :=
 { to_fun := λ x y, quotient.lift_on y (λ y, ⟦(x : G) * y⟧) 
   (λ a b (hab : _ ∈ H), quotient.sound 
@@ -722,40 +714,37 @@ def thing (H : set G) [is_subgroup H] : group_action H (left_cosets H) :=
   one := λ a, quotient.induction_on a (λ a, quotient.sound (show (1 : G) * a ≈ a, by simp)),
   mul := λ x y a, quotient.induction_on a (λ a, quotient.sound (by rw ← mul_assoc; refl)) }
 
-#print quotient.lift_on
 lemma fixed_points_thing (H : set G) [is_subgroup H] [fintype H] : 
   fixed_points (thing H) ≃ left_cosets { x : normalizer H | ↑x ∈ H } :=
 equiv.symm (@equiv.of_bijective _ _ 
 (show left_cosets {x : normalizer H | ↑x ∈ H} → fixed_points (thing H), from λ x,
-⟨@quotient.lift_on _ _ (left_rel {x : normalizer H | ↑x ∈ H}) x (λ x, show fixed_points (thing H), from begin
-  
-end) sorry, sorry⟩) sorry)
+⟨@quotient.lift_on _ _ (left_rel {x : normalizer H | ↑x ∈ H}) x 
+  (λ ⟨x, (hx : ∀ (n : G), n ∈ H ↔ x * n * x⁻¹ ∈ H)⟩, show fixed_points (thing H), from 
+    ⟨⟦x⟧, mem_fixed_points.2 (λ y, quotient.induction_on y (λ y ⟨⟨b, hb₁⟩, hb⟩, 
+    have hb : x * (x⁻¹ * b⁻¹ * y) * x⁻¹ ∈ H := (hx _).1 (by rw ← mul_inv_rev; exact quotient.exact hb),
+    quotient.sound ((hx _).2 $ (inv_mem_iff H).1 $ 
+    (mul_mem_cancel_right H (inv_mem hb₁)).1
+    begin
+      simpa [mul_inv_rev, mul_assoc] using hb,
+    end)))⟩) 
+    (λ ⟨x, hx⟩ ⟨y, hy⟩ (hxy : x⁻¹ * y ∈ H), @quotient.sound _ (left_rel {x : normalizer H | ↑x ∈ H}) _ _ begin  
+      
+    end), sorry⟩) sorry)
 
-set_option pp.proofs true
-#print subtype.mk
-/- eq.rec (λ (ha : ⟦x⟧ ∈ fixed_points (thing H)), ⟦⟨x, h x ha⟩⟧) (quotient.sound h₃) h₁ =
-    ⟦⟨y, h y h₁⟩⟧ -/
 lemma fixed_points_thing (H : set G) [is_subgroup H] [fintype H] : 
   fixed_points (thing H) ≃ left_cosets { x : normalizer H | ↑x ∈ H } :=
 have h : ∀ a : G, ⟦a⟧ ∈ fixed_points (thing H) → a ∈ normalizer H := λ a ha, 
   have ha : ∀ {y : left_cosets H}, y ∈ orbit (thing H) ⟦a⟧ → y = ⟦a⟧ := λ _, 
     (mem_fixed_points.1 ha),
-  inv_mem_normalizer_iff.2 (mem_normalizer_fintype_iff.2 (λ n hn,
+  (is_subgroup.inv_mem_iff _).1 (mem_normalizer_fintype_iff.2 (λ n hn,
     have (n⁻¹ * a)⁻¹ * a ∈ H := quotient.exact (ha (mem_orbit (thing H) _ 
       ⟨n⁻¹, is_subgroup.inv_mem hn⟩)),
     by simpa only [mul_inv_rev, inv_inv] using this)),
-{ to_fun := λ ⟨a, ha⟩, quotient.rec_on a (λ a ha, @quotient.mk _ 
-  (left_rel {x : normalizer H | ↑x ∈ H}) 
-    ⟨a, h a ha⟩) 
-        (λ x y h₃, funext (λ h₁,
-        have _ := quotient.sound h₃,
-        begin
-        
-          show eq.rec (λ ha, 
-            quotient.mk (subtype.mk x (h x ha) : { a : g // a ∈ normalizer H})) (quotient.sound h₃) h₁ =
-            quotient.mk (subtype.mk y (h y h₁) : { a : g // a ∈ normalizer H}),
-        end
-          )) ha
+{ to_fun := λ ⟨a, ha⟩, quotient.hrec_on a (λ a ha, @quotient.mk _ 
+  (left_rel {x : normalizer H | ↑x ∈ H}) ⟨a, h a ha⟩) 
+    (λ x y hxy, function.hfunext (by rw quotient.sound hxy) 
+      (λ hx hy _, heq_of_eq (@quotient.sound _ (left_rel {x : normalizer H | ↑x ∈ H}) 
+        _ _ (by exact hxy)))) ha
 
 
 }
