@@ -217,6 +217,9 @@ by rw [cast_val, nat.mod_eq_of_lt h]
 @[simp] lemma cast_nat_mod (n : ℕ) [pos n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
 fin.eq_of_veq (show ((a % n : ℕ) : Zmod n).val = (a : Zmod n).val, by simp)
 
+@[simp] lemma Zmod_one_eq_zero (i : Zmod 1) : i = 0 := 
+fin.eq_of_veq $ nat.eq_zero_of_le_zero $ nat.le_of_lt_succ i.2
+
 @[simp] lemma cast_int_mod (n : ℕ) [pos n] (a : ℤ) : ((a % n : ℤ) : Zmod n) = a :=
 begin
   
