@@ -140,7 +140,7 @@ calc fintype.card (f '' s) = (s.to_finset.image f).card : card_fintype_of_finset
 lemma card_image_of_injective (s : set α) [fintype s]
   {f : α → β} [fintype (f '' s)] (H : function.injective f) : 
   fintype.card (f '' s) = fintype.card s :=
-card_image_of_inj_on $ λ x _ y _ h, H h
+card_image_of_inj_on $ λ _ _ _ _ h, H h
 
 lemma coe_to_finset' [decidable_eq α] (s : set α) [fintype s] : (↑s.to_finset : set α) = s :=
 set.ext (by simp)
@@ -150,7 +150,7 @@ by split; simp [set.ssubset_def, ne.def, set.subset.antisymm_iff] {contextual :=
 
 lemma coe_ssubset [decidable_eq α] {s t : finset α} : (↑s : set α) ⊂ ↑t ↔ s ⊂ t :=
 show ↑s ⊆ ↑t ∧ ↑s ≠ ↑t ↔ s ⊆ t ∧ ¬t ⊆ s,
-  by split; simp [set.ssubset_def, ne.def, set.subset.antisymm_iff] {contextual := tt}
+  by split; simp [ssubset_iff_subset_not_subset, set.subset.antisymm_iff] {contextual := tt}
 
 lemma card_lt_card {s t : set α} [fintype s] [fintype t] (h : s ⊂ t) : card s < card t :=
 begin
@@ -178,18 +178,8 @@ classical.by_contradiction (λ h, lt_irrefl (card t)
 
 end set
 
-namespace pi
-variable {I : Type u}     -- The indexing type
-variable {f : I → Type v} -- The family of types already equiped with instances
-
-lemma mul_apply [∀ i, has_mul $ f i] (a b : Π i, f i) (i : I) : (a * b) i = a i * b i := rfl
-
-lemma one_apply [∀ i, has_one $ f i] (i : I) : (1 : Π i, f i) i = 1 := rfl
-
-end pi
-
 local attribute [instance, priority 0] 
-  classical.prop_decidable fintype.subtype_fintype set_fintype
+  fintype.subtype_fintype set_fintype classical.prop_decidable
 
 section should_be_in_group_theory
 
@@ -342,7 +332,7 @@ by finish [orbit]
   f x a ∈ orbit f a :=
 ⟨x, rfl⟩
 
-lemma mem_orbit_self (a : α) :
+@[simp] lemma mem_orbit_self (a : α) :
   a ∈ orbit f a :=
 ⟨1, show f 1 a = a, by simp [one_apply f]⟩
 
@@ -374,28 +364,17 @@ instance (a : α) : is_subgroup (stabilizer f a) :=
 noncomputable lemma orbit_equiv_left_cosets (a : α) :
   orbit f a ≃ left_cosets (stabilizer f a) :=
 by letI := left_rel (stabilizer f a); exact
-{ to_fun := λ b, ⟦classical.some (mem_orbit_iff.1 b.2)⟧,
-  inv_fun := λ x, ⟨f (quotient.out x) a, mem_orbit _ _ _⟩,
-  left_inv := λ b, subtype.eq
-    (let x := classical.some (mem_orbit_iff.1 b.2) in
-    let y := quotient.out ⟦x⟧ in
-    show f y a = b.1, begin
-      have : f (x⁻¹ * y) a = a :=
-        setoid.symm (quotient.mk_out x),
-      rw [← one_mul y, ← mul_inv_self x, mul_assoc, mul_apply f, this],
-      exact classical.some_spec (mem_orbit_iff.1 b.2)
-    end),
-  right_inv := λ x,
-    let hx := mem_orbit_iff.1 (mem_orbit f a (quotient.out x)) in
-    let y := classical.some hx in
-    have hy : f y a = f (quotient.out x) a := classical.some_spec hx,
-    show quotient.mk y = _,
-    begin
-      rw ← quotient.out_eq x,
-      refine quotient.sound  _,
-      show y⁻¹ * _ ∈ _,
-      rw [mem_stabilizer_iff, mul_apply f, ← hy, ← mul_apply f, inv_mul_self, one_apply f]
-    end }
+equiv.symm (@equiv.of_bijective _ _ 
+  (λ x : left_cosets (stabilizer f a), quotient.lift_on x 
+    (λ x, (⟨f x a, mem_orbit _ _ _⟩ : orbit f a)) 
+    (λ g h (H : _ = _), subtype.eq $ (group_action.bijective f (g⁻¹)).1
+      $ show f g⁻¹ (f g a) = f g⁻¹ (f h a),
+      by rw [← mul_apply f, ← mul_apply f, H, inv_mul_self, one_apply f])) 
+⟨λ g h, quotient.induction_on₂ g h (λ g h H, quotient.sound $
+have H : f g a = f h a := subtype.mk.inj H, 
+  show f (g⁻¹ * h) a = a,
+  by rw [mul_apply f, ← H, ← mul_apply f, inv_mul_self, one_apply f]), 
+λ ⟨b, ⟨g, hgb⟩⟩, ⟨⟦g⟧, subtype.eq hgb⟩⟩)
 
 def fixed_points : set α := {a : α | ∀ x, x ∈ stabilizer f a}
 
@@ -407,12 +386,12 @@ lemma mem_fixed_points' {f : G → α → α} [is_group_action f] {a : α} : a �
 ⟨λ h b h₁, let ⟨x, hx⟩ := mem_orbit_iff.1 h₁ in hx ▸ h x,
 λ h b, mem_stabilizer_iff.2 (h _ (mem_orbit _ _ _))⟩
 
-lemma card_orbit_of_mem_fixed_point {f : G → α → α} [is_group_action f]  {a : α} [fintype (orbit f a)] : 
+lemma card_orbit_of_mem_fixed_point {f : G → α → α} [is_group_action f] {a : α} [fintype (orbit f a)] : 
   a ∈ fixed_points f ↔ card (orbit f a) = 1 := 
 begin
   rw [fintype.card_eq_one_iff, mem_fixed_points],
   split,
-  { refine λ h, ⟨⟨a, mem_orbit_self _ _⟩, λ ⟨b, ⟨x, hx⟩⟩, subtype.eq $ by simp [h x, hx.symm]⟩ }, 
+  { exact λ h, ⟨⟨a, mem_orbit_self _ _⟩, λ ⟨b, ⟨x, hx⟩⟩, subtype.eq $ by simp [h x, hx.symm]⟩ },
   { assume h x,
     rcases h with ⟨⟨z, hz⟩, hz₁⟩,
     exact calc f x a = z : subtype.mk.inj (hz₁ ⟨f x a, mem_orbit _ _ _⟩)
@@ -480,6 +459,7 @@ calc card α % p = finset.sum finset.univ (λ a : set α, card {x // orbit f x =
   by rw [card_congr (equiv_fib (orbit f)), fintype.card_sigma] 
 ... = _ : nat.sum_mod _ _ _
 ... = fintype.card ↥(fixed_points f) % p : by rw ← h; congr
+
 end group_action
 
 namespace sylow
@@ -514,29 +494,29 @@ lemma mem_Gstar_iff {n : ℕ} [Zmod.pos n] (v : Zmod (n + 1) → G) :
     = list.map (λ (m : ℕ), v m) (list.range n) := list.map_congr (λ m hm, 
   have hm' : m < n := list.mem_range.1 hm,  
     by simp[nat.mod_eq_of_lt hm']),
-⟨λ m, v m.val, set.mem_univ _, funext (λ i, show dite _ _ _ = _, begin
-  split_ifs,
-  { refine congr_arg _ (fin.eq_of_veq _), 
-    simp [nat.mod_eq_of_lt h_1, nat.mod_eq_of_lt (nat.lt_succ_of_lt h_1)] },
-  { have hi : i = n := fin.eq_of_veq begin 
-      rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)],
-      exact le_antisymm (nat.le_of_lt_succ i.2) (le_of_not_gt h_1),
-    end,
-    rw [h₁, hi, inv_eq_iff_mul_eq_one, ← prod_lemma, h] }
-end)⟩,
+  ⟨λ m, v m.val, set.mem_univ _, funext (λ i, show dite _ _ _ = _, begin
+    split_ifs,
+    { refine congr_arg _ (fin.eq_of_veq _), 
+      simp [nat.mod_eq_of_lt h_1, nat.mod_eq_of_lt (nat.lt_succ_of_lt h_1)] },
+    { have hi : i = n := fin.eq_of_veq begin 
+        rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)],
+        exact le_antisymm (nat.le_of_lt_succ i.2) (le_of_not_gt h_1),
+      end,
+      rw [h₁, hi, inv_eq_iff_mul_eq_one, ← prod_lemma, h] }
+  end)⟩,
 λ ⟨w, hw⟩, 
-have h : list.map (λ m : ℕ, w m) (list.range n) = list.map (λ m : ℕ, v m) (list.range n) :=
-list.map_congr (λ k hk, 
-  have hk' : k < n := list.mem_range.1 hk,
-  hw.2 ▸ (show _ = dite _ _ _, 
-    by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_of_lt hk'), dif_pos hk'])),
-begin
-  show list.prod (list.map (λ (m : ℕ), v ↑m) (list.range (n + 1))) = 1,
-  rw [prod_lemma, ← h, ← hw.2],
-  show _ * dite _ _ _ = (1 : G),
-  rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _), dif_neg (lt_irrefl _),
-    mul_inv_self],
-end⟩
+  have h : list.map (λ m : ℕ, w m) (list.range n) = list.map (λ m : ℕ, v m) (list.range n) :=
+  list.map_congr (λ k hk, 
+    have hk' : k < n := list.mem_range.1 hk,
+    hw.2 ▸ (show _ = dite _ _ _, 
+      by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_of_lt hk'), dif_pos hk'])),
+  begin
+    show list.prod (list.map (λ (m : ℕ), v ↑m) (list.range (n + 1))) = 1,
+    rw [prod_lemma, ← h, ← hw.2],
+    show _ * dite _ _ _ = (1 : G),
+    rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _), dif_neg (lt_irrefl _),
+      mul_inv_self],
+  end⟩
 
 def rotate (α : Type v) (n : ℕ) (i : multiplicative (Zmod n)) (v : multiplicative (Zmod n) → α)
   (m : multiplicative (Zmod n)) := v (m * i) 
@@ -705,7 +685,7 @@ begin
     exact or.resolve_left (hnp.2 _ (order_of_dvd_of_pow_eq_one hxp)) 
       (λ h, hx (eq_one_of_order_of_eq_one h)) },
   { existsi (y : Zmod (succ n) → G) 0,
-    exact or.resolve_left (hnp.2 _ (order_of_dvd_of_pow_eq_one hyp)) 
+    exact or.resolve_left (hnp.2 _ (order_of_dvd_of_pow_eq_one hyp))
       (λ h, hy (eq_one_of_order_of_eq_one h)) }
 end
 

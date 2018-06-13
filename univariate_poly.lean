@@ -617,7 +617,7 @@ lemma root_or_root_of_root_mul (h : is_root (p * q) a) : is_root p a ∨ is_root
 by rw [is_root, eval_mul] at h;
   exact eq_zero_or_eq_zero_of_mul_eq_zero h
 
-lemma roots_aux : Π {p : polynomial α} (hp : p ≠ 0),
+lemma exists_finset_roots : Π {p : polynomial α} (hp : p ≠ 0),
   ∃ s : finset α, s.card ≤ degree p ∧ ∀ x, x ∈ s ↔ is_root p x
 | p := λ hp, by haveI := classical.prop_decidable (∃ x, is_root p x); exact
 if h : ∃ x, is_root p x 
@@ -636,7 +636,7 @@ then
   have wf : degree (div_by_monic p _) < degree p :=
     degree_div_by_monic_lt _ (monic_X_sub_C x)
     ((degree_X_sub_C x).symm ▸ nat.succ_pos _) hpd,
-  let ⟨t, htd, htr⟩ := @roots_aux (div_by_monic p (monic_X_sub_C x)) hd0 in
+  let ⟨t, htd, htr⟩ := @exists_finset_roots (div_by_monic p (monic_X_sub_C x)) hd0 in
   ⟨insert x t, calc (insert x t).card ≤ t.card + 1 : finset.card_insert_le _ _
     ... ≤ degree (div_by_monic p (monic_X_sub_C x)) + 1 : nat.succ_le_succ htd
     ... ≤ _ : nat.succ_le_of_lt wf,
@@ -648,22 +648,22 @@ then
       root_or_root_of_root_mul⟩
   end⟩
 else
-  ⟨∅, nat.zero_le _, by clear roots_aux; finish⟩
+  ⟨∅, nat.zero_le _, by clear exists_finset_roots; finish⟩
 using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
 
 noncomputable def roots (p : polynomial α) : finset α := 
-if h : p = 0 then ∅ else classical.some (roots_aux h)
+if h : p = 0 then ∅ else classical.some (exists_finset_roots h)
 
 lemma card_roots (p : polynomial α) : (roots p).card ≤ degree p :=
 begin
   unfold roots,
   split_ifs,
   { exact nat.zero_le _ },
-  { exact (classical.some_spec (roots_aux h)) .1 }
+  { exact (classical.some_spec (exists_finset_roots h)).1 }
 end
 
 lemma mem_roots (hp : p ≠ 0) : a ∈ p.roots ↔ is_root p a :=
-by unfold roots; rw dif_neg hp; exact (roots_aux hp).2.2 _
+by unfold roots; rw dif_neg hp; exact (classical.some_spec (exists_finset_roots hp)).2 _
 
 end integral_domain
 
@@ -728,9 +728,9 @@ begin
   exact nat.le_of_succ_le_succ h
 end
  
-lemma valuation_remainder_lt_aux : ∀ p : polynomial α, q ≠ 0 → 
-  euclid_size_poly (mod_aux p q) < euclid_size_poly q
-using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
+-- lemma valuation_remainder_lt_aux : ∀ p : polynomial α, q ≠ 0 → 
+--   euclid_size_poly (mod_aux p q) < euclid_size_poly q
+-- using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
 
 /-
 instance : euclidean_domain (polynomial α) :=
