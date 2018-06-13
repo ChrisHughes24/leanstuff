@@ -23,7 +23,7 @@ lemma sum_const [add_comm_monoid β] (s : finset α) (b : β)
   [decidable_eq α] : s.sum (λ x, b) = add_monoid.smul s.card b :=
 finset.induction_on s rfl (by simp [add_monoid.add_smul] {contextual := tt})
 
-lemma card_pi {δ : α → Type*} [decidable_eq α] [Π a, decidable_eq (δ a)]
+lemma card_pi {δ : α → Type*} [decidable_eq α]
   (s : finset α) (t : Π a, finset (δ a)) : (s.pi t).card = s.prod (λ a, card (t a)) :=
 multiset.card_pi _ _
 
@@ -74,7 +74,7 @@ by rw [← card_unit, card_eq]; exact
 ⟨λ ⟨a⟩, ⟨a.symm unit.star, λ y, a.bijective.1 (subsingleton.elim _ _)⟩, 
 λ ⟨x, hx⟩, ⟨⟨λ _, unit.star, λ _, x, λ _, (hx _).trans (hx _).symm, 
     λ _, subsingleton.elim _ _⟩⟩⟩
-#print axioms card_congr
+
 lemma card_eq_zero_iff [fintype α] : card α = 0 ↔ (α → false) :=
 ⟨λ h a, have e : α ≃ empty := classical.choice (card_eq.1 (by simp [h])),
   (e a).elim, 
@@ -104,7 +104,7 @@ match n, hn with
   (λ h, card_unit ▸ card_le_of_injective (λ _, ())
     (λ _ _ _, h _ _))⟩
 end
-#print card_le_one_iff
+
 open finset
 
 lemma card_pi {β : α → Type*} [fintype α] [decidable_eq α]
@@ -127,7 +127,6 @@ namespace set
 lemma card_eq_of_eq {s t : set α} [fintype s] [fintype t] (h : s = t) :
   card s = card t :=
 by congr; assumption
-#print card_eq_of_eq
 
 lemma card_image_of_inj_on {s : set α} [fintype s]
   {f : α → β} [fintype (f '' s)] (H : ∀x∈s, ∀y∈s, f x = f y → x = y) :
@@ -588,8 +587,8 @@ begin
       { simp [list.map_map, function.comp] },
       resetI,
       cases n,
-      { simp [list.range, list.range_core, *, 
-          Zmod.Zmod_one_eq_zero i, Zmod.Zmod_one_eq_zero 1] at * },
+      { refine eq.trans _ ih,
+        simp [list.range, list.range_core]; congr },
       { have h : list.map (λ m : ℕ, v (↑m + (i + 1))) (list.range n) =
           list.map (λ m : ℕ, v (m + i)) (list.map succ (list.range n)),
         { simp [list.map_map, function.comp] },
@@ -1000,34 +999,29 @@ by exactI begin
     (stabilizer (conj_on_sylow hp) ⟨H, hH⟩) (by apply_instance)), card_prod],
   exact dvd_mul_right _ _
 end
-local attribute [instance] classical.prop_decidable
 
 lemma sylow3_part2 [fintype G] {p : ℕ} (hp : nat.prime p) : 
   card {H : set G // is_sylow H hp} ≡ 1 [MOD p] :=
 let ⟨H, hH⟩ := exists_sylow_subgroup G hp in
 by exactI
+eq.trans ((eq.trans (by congr)) (mpl (λ x : H, conj_on_sylow hp (x : G)) hp (card_sylow H hp)))
 begin
-  have : _ % p = _ % p := mpl (λ x : H, conj_on_sylow hp (x : G)) hp (card_sylow H hp),
-  show _ = _,
-  refine ((eq.trans (by congr)) this).trans _,
   let s,
   show s % p = 1 % p,
   suffices : s = 1,
-  { simp [this] },
-  show fintype.card _ = 1,
+  { rw this },
   refine fintype.card_eq_one_iff.2 _,
   existsi (⟨(⟨H, hH⟩ :  {H // is_sylow H hp}), λ ⟨x, hx⟩, subtype.eq $
     set.ext (λ i, by simp [conj_on_sylow, conjugate_set_eq_preimage, mul_mem_cancel_left _ hx,
       mul_mem_cancel_right _ (inv_mem hx)])⟩ :
         subtype (fixed_points (λ (x : ↥H), conj_on_sylow hp ↑x))),
-  assume L,
+  refine λ L, subtype.eq (subtype.eq _),
   rcases L with ⟨⟨L, hL₁⟩, hL₂⟩,
   have Hsub : H ⊆ normalizer L,
   { assume x hx n,
     conv {to_rhs, rw ← subtype.mk.inj (hL₂ ⟨x, hx⟩)},
     simp [conjugate_set, mul_assoc] },
   cases sylow2 hp L H with x hx,
-  refine subtype.eq (subtype.eq _),
   suffices : ∀ x, x ∈ {x : normalizer L | (x : G) ∈ L} ↔ x ∈ {x : normalizer L | (x : G) ∈ H},
   { exact set.ext (λ x, ⟨λ h, (this ⟨x, subset_normalizer _ h⟩).1 h, λ h, (this ⟨x, Hsub h⟩).2 h⟩) },
   assume x,
