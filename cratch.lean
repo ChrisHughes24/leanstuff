@@ -1,5 +1,96 @@
-import group_theory.coset
-variables {G : Type*} [group G]
+import data.set
+open set
+local attribute [instance] classical.prop_decidable
+example (a b : Prop) : ((a → b) → (a ↔ b)) ↔ (b → a) :=
+⟨λ h, begin
+  by_cases A : b,
+  simp [A, *] at *,
+  simp [A, *] at *,
+
+
+end,
+begin
+  intros; split; assumption
+end⟩ 
+
+-- so my goal is to define graphs
+-- I find the best way to implement them is as a structure with a set of vertices and a binary relation on those vertices
+-- I like the coercion from sets to subtypes, but it looks like it makes things a little complicated with the little experience I have (see below)
+
+constants {V : Type} (vertices : set V) (edge : vertices → vertices → Prop)
+
+-- this is an extra convenient definition to allow the creation of "set edges" below
+def edges : set (vertices × vertices) := λ ⟨v₁,v₂⟩, edge v₁ v₂
+
+-- I would like to reason on the edge binary relation rather than on the set of edges, that's why I suppose edge is a decidable rel
+instance [H : decidable_rel edge] : decidable_pred edges := λ⟨v₁,v₂⟩, H v₁ v₂
+
+-- set of edges whose tip is v ∈ vertices
+-- used to define the "in-degree" of vertex v
+-- in_edges has type "set edges" because I find it convenient, maybe it's not the best to do (too many coercions ?)
+def in_edges (v : vertices) : set edges := let ⟨v,hv⟩ := v in λ⟨⟨_,⟨b,hb⟩⟩, _⟩, b = v
+
+-- I need to use noncomputable because in_edges is a set whose base type is a subtype and
+-- I only assume decidable_eq on V
+-- but there exists subtype.decidable_eq...
+#check subtype.decidable_eq
+
+noncomputable instance [H : decidable_eq V] {v : vertices} : decidable_pred (in_edges v) := let ⟨v,hv⟩ := v in λ⟨⟨⟨a, ha⟩,⟨b,hb⟩⟩, _⟩, H b v
+noncomputable instance {v : vertices} [fintype vertices] [decidable_rel edge] [decidable_eq V] : fintype (in_edges v) := @set_fintype _ (set_fintype _) _ _
+
+variables [fintype vertices] [decidable_eq V] [decidable_rel edge]
+
+-- now I want to define some stuff on finite graphs and prove some lemmas
+-- for instance, the sum of the in_degrees of all the vertices is equal to fintype.card edges
+-- which I did prove, but with another unpleasant setup
+noncomputable def in_degree (v : vertices) := finset.card (in_edges v).to_finset
+-- this doesn't work without the extra instances above
+-- I would like instances to be inferred out-of-the-box but I didn't succeed
+
+#exit
+instance : fintype bool2 := bool.fintype
+
+lemma card_bool1 : fintype.card bool2 = 2 :=
+begin
+  refl,
+end
+
+def bool2_fintype : fintype bool2 := ⟨{tt, ff}, λ x, by cases x; simp⟩
+
+def bool2_fintype3 : fintype bool2 := ⟨{ff, tt}, λ x, by cases x; simp⟩
+
+lemma card_bool2 : @fintype.card bool2 bool2_fintype = 2 :=
+card_bool1 -- They are defeq
+
+lemma card_bool3 : @fintype.card bool2 bool2_fintype = 2 :=
+begin
+  rw card_bool1, --doesn't work
+end
+
+lemma card_bool4 : @fintype.card bool2 bool2_fintype3 = 2 := card_bool1
+
+#exit
+#print rat.has_mul
+def poly := list znum
+
+def poly.is_eq_aux : list znum -> list znum -> bool
+| [] [] := tt
+| [] (h₂ :: t₂) := if (h₂ = 0) then poly.is_eq_aux [] t₂ else ff
+| (h₁ :: t₁) [] := if (h₁ = 0) then poly.is_eq_aux t₁ [] else ff
+| (h₁ :: t₁) (h₂ :: t₂) := if (h₁ = h₂) then poly.is_eq_aux t₁ t₂ else ff
+
+def poly.is_eq : poly → poly → bool
+| [] [] := tt
+| [] (h₂ :: t₂) := if (h₂ = 0) then poly.is_eq [] t₂ else ff
+| (h₁ :: t₁) [] := if (h₁ = 0) then poly.is_eq t₁ [] else ff
+| (h₁ :: t₁) (h₂ :: t₂) := if (h₁ = h₂) then poly.is_eq t₁ t₂ else ff
+
+#print default.sizeof
+
+example (n : ℕ) : n ^ (n + 1) = sorry :=
+begin
+  simp [nat.pow_succ],
+end
 
 def normalizer (H : set G) : set G :=
 { g : G | ∀ n, n ∈ H ↔ g * n * g⁻¹ ∈ H }

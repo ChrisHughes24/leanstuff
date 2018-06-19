@@ -620,7 +620,7 @@ by rw [is_root, eval_mul] at h;
 lemma exists_finset_roots : Π {p : polynomial α} (hp : p ≠ 0),
   ∃ s : finset α, s.card ≤ degree p ∧ ∀ x, x ∈ s ↔ is_root p x
 | p := λ hp, by haveI := classical.prop_decidable (∃ x, is_root p x); exact
-if h : ∃ x, is_root p x 
+if h : ∃ x, is_root p x
 then
   let ⟨x, hx⟩ := h in
   have hpd : 0 < degree p := nat.pos_of_ne_zero
@@ -728,9 +728,29 @@ begin
   exact nat.le_of_succ_le_succ h
 end
  
--- lemma valuation_remainder_lt_aux : ∀ p : polynomial α, q ≠ 0 → 
---   euclid_size_poly (mod_aux p q) < euclid_size_poly q
--- using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
+lemma valuation_remainder_lt_aux (p : polynomial α) (hq : q ≠ 0) :
+  euclid_size_poly (mod_aux p q) < euclid_size_poly q :=
+if h : 0 = degree q then begin 
+  simp [euclid_size_poly, mod_aux, hq, mod_by_monic],
+  rw div_mod_by_monic_aux,
+  simp,
+end
+else if h₁ : mod_aux p q = 0 then sorry
+
+else 
+have h₂ : degree (q * C (leading_coeff q)⁻¹) = degree q,
+  from have C (leading_coeff q)⁻¹ ≠ 0, from mt leading_coeff_eq_zero.2 
+    $ by rw [leading_coeff_C]; exact inv_ne_zero (mt leading_coeff_eq_zero.1 hq),
+  by rwa [degree_mul_eq hq this, degree_C, add_zero],
+have degree (mod_by_monic p _) < degree (q * C (leading_coeff q)⁻¹) := 
+    degree_mod_by_monic_lt p 
+    (monic_mul_leading_coeff_inv (mt leading_coeff_eq_zero.1 hq)) 
+    (nat.pos_of_ne_zero $ h₂.symm ▸ ne.symm h),
+begin
+  unfold euclid_size_poly,
+  rw [if_neg hq, if_neg h₁, mod_aux, dif_neg (mt leading_coeff_eq_zero.1 hq), ← h₂],
+  exact nat.succ_lt_succ this,
+end
 
 /-
 instance : euclidean_domain (polynomial α) :=
