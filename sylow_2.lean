@@ -58,15 +58,14 @@ pi.fintype
 def subtype_fintype [fintype α] (p : α → Prop) [decidable_pred p] : fintype {x // p x} :=
 set_fintype _
 
-lemma card_eq_one_iff [fintype α] : card α = 1 ↔ (∃ x : α, ∀ y : α, y = x) :=
+lemma card_eq_one_iff [fintype α] : card α = 1 ↔ (∃ x : α, ∀ y, y = x) :=
 by rw [← card_unit, card_eq]; exact
 ⟨λ ⟨a⟩, ⟨a.symm unit.star, λ y, a.bijective.1 (subsingleton.elim _ _)⟩, 
 λ ⟨x, hx⟩, ⟨⟨λ _, unit.star, λ _, x, λ _, (hx _).trans (hx _).symm, 
     λ _, subsingleton.elim _ _⟩⟩⟩
 
 lemma card_eq_zero_iff [fintype α] : card α = 0 ↔ (α → false) :=
-⟨λ h a, have e : α ≃ empty := classical.choice (card_eq.1 (by simp [h])),
-  (e a).elim, 
+⟨λ h a, have e : α ≃ empty := classical.choice (card_eq.1 (by simp [h])), (e a).elim, 
 λ h, have e : α ≃ empty := ⟨λ a, (h a).elim, λ a, a.elim, λ a, (h a).elim, λ a, a.elim⟩, 
   by simp [card_congr e]⟩
 
@@ -138,8 +137,10 @@ lemma ssubset_iff_subset_not_subset {s t : set α} : s ⊂ t ↔ s ⊆ t ∧ ¬ 
 by split; simp [set.ssubset_def, ne.def, set.subset.antisymm_iff] {contextual := tt}
 
 lemma coe_ssubset [decidable_eq α] {s t : finset α} : (↑s : set α) ⊂ ↑t ↔ s ⊂ t :=
-show ↑s ⊆ ↑t ∧ ↑s ≠ ↑t ↔ s ⊆ t ∧ ¬t ⊆ s,
-  by split; simp [ssubset_iff_subset_not_subset, set.subset.antisymm_iff] {contextual := tt}
+show (↑s : set α) ⊂ ↑t ↔ s ⊆ t ∧ ¬t ⊆ s,
+  by simp [ssubset_iff_subset_not_subset] {contextual := tt}
+
+#print coe_ssubset
 
 lemma card_lt_card {s t : set α} [fintype s] [fintype t] (h : s ⊂ t) : card s < card t :=
 begin
@@ -211,31 +212,6 @@ end
   ⟨⟨(1 : G), by simp⟩, λ ⟨y, hy⟩, subtype.eq $ is_subgroup.mem_trivial.1 hy⟩
 
 local attribute [instance] left_rel normal_subgroup.to_is_subgroup
-
-instance (H : set G) [normal_subgroup H] : group (left_cosets H) :=
-{ one := ⟦1⟧,
-  mul := λ a b, quotient.lift_on₂ a b
-  (λ a b, ⟦a * b⟧)
-  (λ a₁ a₂ b₁ b₂ (hab₁ : a₁⁻¹ * b₁ ∈ H) (hab₂ : a₂⁻¹ * b₂ ∈ H),
-    quotient.sound
-    ((is_subgroup.mul_mem_cancel_left H (is_subgroup.inv_mem hab₂)).1
-        (by rw [mul_inv_rev, mul_inv_rev, ← mul_assoc (a₂⁻¹ * a₁⁻¹),
-          mul_assoc _ b₂, ← mul_assoc b₂, mul_inv_self, one_mul, mul_assoc (a₂⁻¹)];
-          exact normal_subgroup.normal _ hab₁ _))),
-  mul_assoc := λ a b c, quotient.induction_on₃
-    a b c (λ a b c, show ⟦_⟧ = ⟦_⟧, by rw mul_assoc),
-  one_mul := λ a, quotient.induction_on a
-    (λ a, show ⟦_⟧ = ⟦_⟧, by rw one_mul),
-  mul_one := λ a, quotient.induction_on a
-    (λ a, show ⟦_⟧ = ⟦_⟧, by rw mul_one),
-  inv := λ a, quotient.lift_on a (λ a, ⟦a⁻¹⟧)
-    (λ a b hab, quotient.sound begin
-      show a⁻¹⁻¹ * b⁻¹ ∈ H,
-      rw ← mul_inv_rev,
-      exact is_subgroup.inv_mem (is_subgroup.mem_norm_comm hab)
-    end),
-  mul_left_inv := λ a, quotient.induction_on a
-    (λ a, show ⟦_⟧ = ⟦_⟧, by rw inv_mul_self) }
 
 instance quotient.mk.is_group_hom (H : set G) [normal_subgroup H] : @is_group_hom G (left_cosets H) _ _ 
   quotient.mk := 

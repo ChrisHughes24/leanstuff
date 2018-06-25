@@ -99,7 +99,7 @@ by simp [C, monomial, single_mul_single]
 single_mul_single
 
 @[simp] lemma monomial_zero_right (n : ℕ) : monomial n (0 : α) = 0 := 
-by ext; simp [monomial]; refl
+finsupp.ext $ λ a, show ite _ _ _ = (0 : α), by split_ifs; simp
 
 lemma X_pow_eq_monomial : (X : polynomial α) ^ n = monomial n (1 : α) :=
 by induction n; simp [X, C_1.symm, -C_1, C, pow_succ, *] at *
@@ -237,6 +237,8 @@ begin
   refl
 end
 
+@[simp] lemma degree_one : degree (1 : polynomial α) = 0 := degree_C _
+
 lemma degree_monomial_le (n : ℕ) (a : α) : degree (monomial n a) ≤ n :=
 begin
   unfold single monomial degree finsupp.support,
@@ -347,6 +349,8 @@ end
 
 @[simp] lemma leading_coeff_C (a : α) : leading_coeff (C a) = a :=
 leading_coeff_monomial _ _
+
+@[simp] lemma monic_one : monic (1 : polynomial α) := leading_coeff_C _
 
 lemma leading_coeff_add_of_lt (h : degree p < degree q) :
   leading_coeff (p + q) = leading_coeff q :=
@@ -482,6 +486,32 @@ begin
 end
 using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
 
+@[simp] lemma mod_by_monic_one : ∀ p : polynomial α, mod_by_monic p monic_one = 0
+| p := if hp0 : 0 < degree p then 
+have degree 1 ≤ degree p ∧ 0 < degree p := ⟨by rw @degree_one α _ _; exact nat.zero_le _, hp0⟩,
+have wf : degree (p + -monomial (degree p) (leading_coeff p)) < degree p :=
+  by have := div_wf_lemma this monic_one; simpa using this,
+begin
+  unfold mod_by_monic div_mod_by_monic_aux,
+  rw if_pos this,
+  exact mod_by_monic_one _,
+end else 
+have hp0' : degree p = 0 := not_not.1 $ mt nat.pos_of_ne_zero hp0,
+begin
+  unfold mod_by_monic div_mod_by_monic_aux, 
+  simp [hp0, hp0']
+end
+using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf degree⟩]}
+
+lemma degree_mod_by_monic_lt_or_eq_zero (p : polynomial α) {q : polynomial α} (hq : monic q) 
+  : degree (mod_by_monic p hq) < degree q ∨ mod_by_monic p hq = 0 :=
+if hq0 : 0 < degree q then or.inl $ degree_mod_by_monic_lt p hq hq0
+else have hq0 : degree q = 0 := not_not.1 $ mt nat.pos_of_ne_zero hq0,
+have hq : q = 1 :=
+  by rw [eq_C_of_degree_eq_zero hq0, ← hq0, (show q (degree q) = 1, from hq)]; refl,
+by subst hq;
+  simp [mod_by_monic_one]
+
 lemma mod_by_monic_eq_sub_mul_div : ∀ (p : polynomial α) {q : polynomial α} (hq :monic q),
   mod_by_monic p hq = p - q * div_by_monic p hq
 | p := λ q hq, if h : degree q ≤ degree p ∧ 0 < degree p then
@@ -529,9 +559,23 @@ begin
   exact (lt_add_iff_pos_left _).2 hq0,
 end
 
-lemma dvd_of_mod_by_monic_eq_zero (hq : monic q): mod_by_monic p hq = 0 → q ∣ p :=
-λ h, by rw [← mod_by_monic_add_div p hq, h, zero_add];
-  exact dvd_mul_right _ _
+lemma dvd_iff_mod_by_monic_eq_zero (hq : monic q) : mod_by_monic p hq = 0 ↔ q ∣ p :=
+⟨λ h, by rw [← mod_by_monic_add_div p hq, h, zero_add];
+  exact dvd_mul_right _ _,
+λ h, or.cases_on (degree_mod_by_monic_lt_or_eq_zero p hq) 
+(λ hlt, let ⟨r, hr⟩ := exists_eq_mul_right_of_dvd h in
+have hr : mod_by_monic p hq = q * (r - div_by_monic p hq) :=
+  by rwa [← mod_by_monic_add_div p hq, ← eq_sub_iff_add_eq, ← mul_sub] at hr,
+have r - div_by_monic p hq = 0 := classical.by_contradiction
+  (λ h,
+  have hlc : leading_coeff q * leading_coeff (r - div_by_monic p hq) ≠ 0 :=
+    by rwa [monic.def.1 hq, one_mul, ne.def, leading_coeff_eq_zero],
+  have hq : degree (q * (r - div_by_monic p hq)) = 
+    degree q + degree (r - div_by_monic p hq) :=
+      by rw degree_mul_eq' hlc,
+  by rw [hr, hq] at hlt;
+    exact not_lt_of_ge (nat.le_add_right _ _) hlt),
+by rwa [this, mul_zero] at hr) id⟩
 
 end comm_ring
 
@@ -672,93 +716,109 @@ variables [field α] {p q : polynomial α}
 instance : vector_space α (polynomial α) :=
 { ..finsupp.to_module }
 
-lemma monic_mul_leading_coeff_inv (h : leading_coeff p ≠ 0) : 
+lemma monic_mul_leading_coeff_inv (h : p ≠ 0) : 
   monic (p * C (leading_coeff p)⁻¹) :=
-by rw [monic, leading_coeff_mul, leading_coeff_C, mul_inv_cancel h]
+by rw [monic, leading_coeff_mul, leading_coeff_C, 
+  mul_inv_cancel (show leading_coeff p ≠ 0, from mt leading_coeff_eq_zero.1 h)]
+
+lemma degree_mul_leading_coeff_inv (h : p ≠ 0) :
+  degree (p * C (leading_coeff p)⁻¹) = degree p :=
+have C (leading_coeff p)⁻¹ ≠ 0 := mt leading_coeff_eq_zero.2
+  $ by rw [leading_coeff_C];
+  exact inv_ne_zero (mt leading_coeff_eq_zero.1 h),
+by rw [degree_mul_eq h this, degree_C, add_zero]
 
 def div_aux (p q : polynomial α) := 
-if h : leading_coeff q = 0 then (0 : polynomial α) else 
+if h : q = 0 then (0 : polynomial α) else 
 C (leading_coeff q)⁻¹ * div_by_monic p 
   (show leading_coeff (q * C (leading_coeff q)⁻¹) = 1,
-    by rw [leading_coeff_mul, leading_coeff_C, mul_inv_cancel h])
+    by rw [leading_coeff_mul, leading_coeff_C, 
+      mul_inv_cancel (show leading_coeff q ≠ 0, from mt leading_coeff_eq_zero.1 h)])
 
 def mod_aux (p q : polynomial α) :=
-if h : leading_coeff q = 0 then p else
-mod_by_monic p 
-  (show leading_coeff (q * C (leading_coeff q)⁻¹) = 1,
-    by rw [leading_coeff_mul, leading_coeff_C, mul_inv_cancel h])
+if h : q = 0 then p else
+mod_by_monic p (monic_mul_leading_coeff_inv h)
 
 instance : has_div (polynomial α) := ⟨div_aux⟩
 
 instance : has_mod (polynomial α) := ⟨mod_aux⟩
 
 private lemma quotient_mul_add_remainder_eq_aux (p q : polynomial α) :
-  (div_aux p q) * q + (mod_aux p q) = p :=
-if h : leading_coeff q = 0 then by simp [mod_aux, div_aux, dif_pos h]
+  q * div_aux p q + mod_aux p q = p :=
+if h : q = 0 then by simp [mod_aux, div_aux, dif_pos h]
 else begin
   conv {to_rhs, rw ← mod_by_monic_add_div p (monic_mul_leading_coeff_inv h)},
-  rw [mod_aux, div_aux, dif_neg h, dif_neg h, add_comm, mul_comm _ q, mul_assoc],
+  rw [mod_aux, div_aux, dif_neg h, dif_neg h, add_comm, mul_assoc],
   refl,
 end
 
-/-- euclid_size_poly is the Euclidean size function, used in the proof that polynomials over a 
-field are a Euclidean domain. `euclid_size_poly 0 = 0` and `euclid_size_poly p = degree p + 1` 
+/-- euclid_val_poly is the Euclidean size function, used in the proof that polynomials over a 
+field are a Euclidean domain. `euclid_val_poly 0 = 0` and `euclid_val_poly p = degree p + 1` 
 for `p ≠ 0`. -/
-def euclid_size_poly (p : polynomial α) := 
+def euclid_val_poly (p : polynomial α) := 
 if p = 0 then 0 else degree p + 1
 
-@[simp] lemma euclid_size_poly_zero : euclid_size_poly (0 : polynomial α) = 0 := rfl
+@[simp] lemma euclid_val_poly_zero : euclid_val_poly (0 : polynomial α) = 0 := rfl
 
-lemma euclid_size_poly_eq_zero (h : euclid_size_poly p = 0) : p = 0 := 
+lemma euclid_val_poly_eq_zero (h : euclid_val_poly p = 0) : p = 0 := 
 begin
-  unfold euclid_size_poly at h,
+  unfold euclid_val_poly at h,
   split_ifs at h,
   { assumption },
   { exact absurd h (nat.succ_ne_zero _) }
 end
 
-lemma euclid_size_poly_le_of_degree_le (h : euclid_size_poly p ≤ euclid_size_poly q) : 
+lemma degree_le_of_euclid_val_poly_le (h : euclid_val_poly p ≤ euclid_val_poly q) :
   degree p ≤ degree q :=
 begin
-  unfold euclid_size_poly at h,
+  unfold euclid_val_poly at h,
   split_ifs at h,
   { simp * },
   { simp [*, nat.zero_le] },
   { simp [not_le_of_gt (nat.succ_pos _), nat.one_add, *] at * },
   exact nat.le_of_succ_le_succ h
 end
- 
-lemma valuation_remainder_lt_aux (p : polynomial α) (hq : q ≠ 0) :
-  euclid_size_poly (mod_aux p q) < euclid_size_poly q :=
-if h : 0 = degree q then begin 
-  simp [euclid_size_poly, mod_aux, hq, mod_by_monic],
-  rw div_mod_by_monic_aux,
-  simp,
-end
-else if h₁ : mod_aux p q = 0 then sorry
 
-else 
-have h₂ : degree (q * C (leading_coeff q)⁻¹) = degree q,
-  from have C (leading_coeff q)⁻¹ ≠ 0, from mt leading_coeff_eq_zero.2 
-    $ by rw [leading_coeff_C]; exact inv_ne_zero (mt leading_coeff_eq_zero.1 hq),
-  by rwa [degree_mul_eq hq this, degree_C, add_zero],
-have degree (mod_by_monic p _) < degree (q * C (leading_coeff q)⁻¹) := 
-    degree_mod_by_monic_lt p 
-    (monic_mul_leading_coeff_inv (mt leading_coeff_eq_zero.1 hq)) 
-    (nat.pos_of_ne_zero $ h₂.symm ▸ ne.symm h),
+lemma euclid_val_poly_lt_of_degree_lt (h : degree p < degree q) :
+  euclid_val_poly p < euclid_val_poly q :=
 begin
-  unfold euclid_size_poly,
-  rw [if_neg hq, if_neg h₁, mod_aux, dif_neg (mt leading_coeff_eq_zero.1 hq), ← h₂],
-  exact nat.succ_lt_succ this,
+  unfold euclid_val_poly,
+  split_ifs; 
+  simp [*, nat.succ_pos, -add_comm, nat.not_lt_zero, 
+    iff.intro nat.lt_of_succ_lt_succ nat.succ_lt_succ] at *
 end
 
-/-
+private lemma val_remainder_lt_aux (p : polynomial α) (hq : q ≠ 0) :
+  euclid_val_poly (mod_aux p q) < euclid_val_poly q :=
+or.cases_on (degree_mod_by_monic_lt_or_eq_zero p (monic_mul_leading_coeff_inv hq)) 
+begin 
+  unfold mod_aux,
+  rw [dif_neg hq, degree_mul_leading_coeff_inv hq],
+  exact euclid_val_poly_lt_of_degree_lt
+end
+(λ h, begin
+  rw [mod_aux, dif_neg hq, h, euclid_val_poly, if_pos rfl, euclid_val_poly, if_neg hq],
+  exact nat.succ_pos _
+end)
+
 instance : euclidean_domain (polynomial α) :=
 { quotient := div_aux, 
   remainder := mod_aux,
-  quotient_mul_add_remainder_eq := by exact quotient_mul_add_remainder_eq_aux,
-  valuation := degree,
-  valuation_remainder_lt := λ a b hb, begin rw [mod_aux, dif_neg], have := degree_mod_by_monic_lt a, end,  } -/
+  quotient_mul_add_remainder_eq := quotient_mul_add_remainder_eq_aux,
+  valuation := euclid_val_poly,
+  val_remainder_lt := λ p q hq, val_remainder_lt_aux _ hq,
+  val_le_mul_left := λ p q hq, 
+  if hp : p = 0 then
+    begin 
+      unfold euclid_val_poly,
+      rw [if_pos hp],
+      exact nat.zero_le _
+    end 
+  else begin
+      unfold euclid_val_poly,
+      rw [if_neg hp, if_neg (mul_ne_zero hp hq), degree_mul_eq hp hq],
+      exact nat.succ_le_succ (nat.le_add_right _ _),
+    end }
 
 end field
 

@@ -1,4 +1,173 @@
-import data.set
+import data.num.lemmas
+lemma e : 12402536340 * 2356324602 = 29224401505141036680 :=
+begin
+  rw ← num.of_nat_inj,
+  simp [num.bit0_of_bit0, num.bit1_of_bit1],
+  refl
+end
+#print e
+#exit
+import data.equiv 
+
+def is_valuation {R : Type} [comm_ring R] {α : Type} [linear_order α] (f : R → α) : Prop := true
+
+structure valuations (R : Type) [comm_ring R] :=
+(α : Type) [Hα : linear_order α] (f : R → α) (Hf : is_valuation f)
+
+instance to_make_next_line_work (R : Type) [comm_ring R] (v : valuations R) : linear_order v.α := v.Hα
+
+instance valuations.setoid (R : Type) [comm_ring R] : setoid (valuations R) := {
+  r := λ v w, ∀ r s : R, valuations.f v r ≤ v.f s ↔ w.f r ≤ w.f s,
+  iseqv := ⟨λ v r s,iff.rfl,λ v w H r s,(H r s).symm,λ v w x H1 H2 r s,iff.trans (H1 r s) (H2 r s)⟩
+}
+
+def Spv1 (R : Type) [comm_ring R] := quotient (valuations.setoid R)
+
+def Spv2 (R : Type) [comm_ring R] := 
+  {ineq : R → R → Prop // ∃ v : valuations R, ∀ r s : R, ineq r s ↔ v.f r ≤ v.f s}
+
+#check Spv1 _ -- Type 1
+#check Spv2 _ -- Type
+
+def to_fun (R : Type) [comm_ring R] : Spv1 R → Spv2 R :=
+quotient.lift (λ v, (⟨λ r s, valuations.f v r ≤ v.f s, ⟨v,λ r s,iff.rfl⟩⟩ : Spv2 R))
+  (λ v w H,begin dsimp,congr,funext,exact propext (H r s) end) 
+
+open function
+noncomputable definition they_are_the_same (R : Type) [comm_ring R] : equiv (Spv1 R) (Spv2 R) :=
+equiv.of_bijective $ show bijective (to_fun R),
+from ⟨λ x y, quotient.induction_on₂ x y $ λ x y h,
+  quotient.sound $ λ r s, iff_of_eq $ congr_fun (congr_fun (subtype.mk.inj h) r) s,
+  λ ⟨x, ⟨v, hv⟩⟩, ⟨⟦v⟧, subtype.eq $ funext $ λ r, funext $ λ s, propext (hv r s).symm⟩⟩
+
+noncomputable definition they_are_the_same (R : Type) [comm_ring R] : equiv (Spv1 R) (Spv2 R) :=
+{ to_fun := to_fun R,
+  inv_fun := inv_fun R,
+  left_inv := λ vs, quotient.induction_on vs begin
+    assume vs,
+    apply quotient.sound,
+    intros r s,
+    have := (to_fun R ⟦vs⟧).property,
+    have H := classical.some_spec (to_fun R ⟦vs⟧).property r s,
+    refine H.symm.trans _,
+    refl,
+  end,
+  right_inv := λ s2,begin
+    cases s2 with rel Hrel,
+    apply subtype.eq,
+    dsimp,
+    unfold inv_fun,
+    funext r s,
+    sorry
+  end 
+}
+
+#exit
+import logic.function data.set.basic set_theory.cardinal
+universes u v w x
+open function
+
+lemma eq.rec_thing {α : Sort*} (a : α) (h : a = a) (C : α → Sort*) (b : C a) : (eq.rec b h : C a) = b := rfl
+
+def T : Type 1 := Σ α : Type, set α
+
+set_option trace.simplify.rewrite true
+lemma Type_1_bigger {α : Type} {f : T → α} : ¬injective f :=
+λ h, cantor_injective (f ∘ sigma.mk α) $ injective_comp h (by simp [injective])
+
+theorem forall_2_true_iff2  {α : Sort u} {β : α → Sort v} : (∀ (a b : α), true) ↔ true :=
+by rw [forall_true_iff, forall_true_iff]
+
+theorem forall_2_true_iff3  {α : Sort u} {β : α → Sort v} : (∀ (a b : α), true) ↔ true :=
+by simp only [forall_true_iff, forall_true_iff]
+
+example {α : Type} {f : α → T} : ¬ surjective f :=
+λ h, Type_1_bigger (injective_surj_inv h)
+
+#exit
+constant a : ℕ
+
+lemma empty_implies_false (f : empty → empty) : f = id :=
+funext $ λ x, by cases x
+
+#print has_equiv
+
+structure thing {R : Type} [ring R]
+{ type : Type }
+(  )
+
+instance : has_repr pnat := subtype.has_repr
+
+#eval ((@function.comp ℕ ℕ ℕ) ∘ (∘))
+
+#print quotient.lift_on
+noncomputable example (f : α → β) :
+  quotient (fun_rel f) ≃ set.range f :=
+@equiv.of_bijective _ _ (λ a, @quotient.lift_on _ _ (fun_rel f) a 
+(λ a, show set.range f, from ⟨f a, set.mem_range_self _⟩)
+(λ a b h, subtype.eq h))
+⟨λ a b, @quotient.induction_on₂ _ _ (fun_rel f) (fun_rel f) _ a b begin
+  assume a b h,
+  exact quot.sound (subtype.mk.inj h),
+end, λ ⟨a, ⟨x, ha⟩⟩, ⟨@quotient.mk _ (fun_rel f) x, by simp * ⟩⟩
+
+noncomputable example {G H : Type*} [group G] [group H] (f : G → H) [is_group_hom f] :
+  {x : left_cosets (ker f) ≃ set.range f // is_group_hom x} :=
+⟨@equiv.of_bijective _ _ (λ a, @quotient.lift_on _ _ (left_rel (ker f)) a 
+  (λ a, show set.range f, from ⟨f a, set.mem_range_self _⟩) 
+    (λ a b h, subtype.eq begin 
+    show f a = f b,
+    rw [← one_mul b, ← mul_inv_self a, mul_assoc, is_group_hom.mul f, mem_trivial.1 h, mul_one],
+  end)) ⟨λ a b, @quotient.induction_on₂ _ _(left_rel (ker f)) (left_rel (ker f)) _ a b 
+  (begin
+    assume a b h,
+    have : f a = f b := subtype.mk.inj h,
+    refine quot.sound (mem_trivial.2 _),
+    rw [mul f, ← this, ← mul f, inv_mul_self, one f]
+  end),
+  λ ⟨a, ha⟩, 
+  let ⟨x, hx⟩ := set.mem_range.1 ha in
+  ⟨@quotient.mk _ (left_rel (ker f)) x, subtype.eq hx⟩⟩,
+  ⟨λ a b, @quotient.induction_on₂ _ _(left_rel (ker f)) (left_rel (ker f)) _ a b begin 
+    assume a b,
+    rw equiv.of_bijective_to_fun,
+    exact subtype.eq (mul f _ _),
+  end⟩⟩
+#print has_repr
+
+instance : has_repr (finset α) :=
+
+#exit
+universes u v
+axiom choice {α : Type u} (β : α → Type v) 
+  (h : ∀ a : α, nonempty (β a)) : Π a, β a
+
+example {α : Type u} : nonempty α → α :=
+λ h, @choice unit (λ _, α) (λ _, h) ()
+
+#print classical.axiom_of_choice
+
+variable (α : Type)
+def foo : semigroup α := 
+begin
+  refine_struct { .. },
+end
+variables {a b c : ℕ}
+
+#print empty.elim
+lemma empty_implies_false (f : empty → empty) : f = id :=
+#print empty_implies_false
+
+#eval list.foldr ((∘) : (ℕ → ℕ) → (ℕ → ℕ) → ℕ → ℕ) id [nat.succ, nat.pred] 0
+
+example (x : ℕ) (l : list ℕ) : list.prod (x :: l) = l.prod * x := rfl
+
+example : list.prod [a, b, c] = sorry := begin
+  unfold list.prod list.foldl,
+
+end
+
+#print list.prod
 open set
 local attribute [instance] classical.prop_decidable
 example (a b : Prop) : ((a → b) → (a ↔ b)) ↔ (b → a) :=
