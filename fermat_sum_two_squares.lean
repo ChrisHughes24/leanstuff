@@ -9,10 +9,11 @@ set_fintype p
 local attribute [instance] fintype_subtype
 
 noncomputable lemma fintype_of_injective {α β : Type*} {f : α → β} [fintype β]
-    (hf : function.injective f) : fintype α :=
-dite (nonempty α) (λ h, have i : inhabited α := classical.inhabited_of_nonempty h,
-of_surjective (@function.inv_fun _ i _ f) $ @function.inv_fun_surjective _ i _ _ hf)
-$ λ h, ⟨∅, λ x, false.elim (h ⟨x⟩)⟩
+  (hf : function.injective f) : fintype α :=
+if h : nonempty α 
+then have i : inhabited α := classical.inhabited_of_nonempty h,
+  of_surjective (@function.inv_fun _ i _ f) $ @function.inv_fun_surjective _ i _ _ hf
+else ⟨∅, λ x, h ⟨x⟩⟩
 
 lemma bijective_of_involution {α : Type*} {f : α → α} (hf : ∀ x, f (f x) = x) : function.bijective f := 
 ⟨λ x y hxy, by rw [← hf x, ← hf y, hxy], λ x, ⟨f x, hf x⟩⟩
@@ -24,7 +25,7 @@ lemma finset_even_card_of_involution {α : Type*} {f : α → α} (s : finset α
 finset.strong_induction_on s $ λ s ht hf₁ hf₂ hs, or.by_cases (decidable.em (s = ∅)) (by simp {contextual := tt}) $
 λ h, let ⟨x, hx⟩ := exists_mem_of_ne_empty h in
 let t := filter (λ y, y ≠ x ∧ y ≠ f x) s in
-have hts : t ⊂ s := ⟨filter_subset _, λ h, by have := subset_iff.1 h x hx; simp * at *⟩,
+have hts : t ⊂ s := ⟨filter_subset _, λ h, by have := subset_iff.1 h hx; simp * at *⟩,
 have ht₂ : ∀ y, y ∈ t → f y ∈ t := λ y hyt,
   have hys : y ∈ s := mem_of_subset hts.1 hyt,
   have h₁ : f y ≠ x := λ h₂,
@@ -50,7 +51,8 @@ lemma fintype_even_card_of_involution {α : Type*} {f : α → α} [fintype α] 
 finset_even_card_of_involution _ (λ x hx, hf₁ x) (λ x hx, hf₂ x) (λ x hx, mem_univ _)
 
 lemma set.card_univ {α : Type*} [fintype α] :  fintype.card (set.univ : set α) = fintype.card α :=
-card_congr ⟨λ a, a.1, λ a, ⟨a, trivial⟩, λ ⟨_, _⟩, rfl, λ _, rfl⟩
+card_congr ⟨λ a, a.1, λ a, ⟨a, set.mem_univ _⟩, λ ⟨_, _⟩, rfl, λ _, rfl⟩
+#print set.card_univ
 
 lemma odd_card_of_involution_of_unique_fixed_point {α : Type*} {f : α → α} [fintype α]
     (hf₂ : ∀ x : α, f (f x) = x) (hf₃ : ∃! a : α, f a = a) : card α % 2 = 1 :=
@@ -63,7 +65,7 @@ have hf'₁ : ∀ x, f' x ≠ x := λ ⟨x, hx⟩ hx',
 have hf'₂ : ∀ x, f' (f' x) = x := λ ⟨x, hx⟩, subtype.eq (hf₂ x),
 have hab : a ∉ {b : α | b ≠ a} := by simp,
 have hα : fintype.card α = fintype.card {b : α | b ≠ a} + 1 := 
-  by rw [← set.card_insert _ hab, ← set.card_univ];
+  by rw [← set.card_fintype_insert' _ hab, ← set.card_univ];
   congr;
   exact set.ext (λ x, by simp [classical.em]),
 let ⟨c, (hc : card {b : α | b ≠ a} = c * 2)⟩ := exists_eq_mul_left_of_dvd 

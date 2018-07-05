@@ -5,7 +5,14 @@ Author: Chris Hughes
 -/
 import data.int.modeq data.int.basic data.nat.modeq data.fintype data.nat.prime data.nat.gcd
 
+lemma int.coe_nat_ne_zero_of_pos {n : ℕ} (hn : 0 < n) : (n : ℤ) ≠ 0 :=
+(ne_of_lt (int.coe_nat_lt.2 hn)).symm
+
+lemma int.coe_nat_nonneg (n : ℕ) : 0 ≤ (n : ℤ) := int.coe_nat_le.2 (nat.zero_le _)
+
 class pos_nat (n : ℕ) := (pos : 0 < n)
+
+instance succ_pos_nat (n : ℕ) : pos_nat (nat.succ n) := ⟨nat.succ_pos _⟩
 
 attribute [class] nat.prime
 
@@ -44,11 +51,11 @@ instance (n : ℕ) : comm_semigroup (Zmod n) :=
       ... ≡ a * (b * c % n) [MOD n] : modeq_mul rfl (nat.mod_mod _ _).symm),
   mul_comm := λ ⟨a, _⟩ ⟨b, _⟩, fin.eq_of_veq (show (a * b) % n = (b * a) % n, by rw mul_comm) }
 
-instance (n : ℕ) [h0 : pos n] : has_one (Zmod n) := ⟨⟨1 % n, nat.mod_lt _ h0.pos⟩⟩
+instance (n : ℕ) [h0 : pos_nat n] : has_one (Zmod n) := ⟨⟨1 % n, nat.mod_lt _ h0.pos⟩⟩
 
-instance (n : ℕ) [h0 : pos n] : has_zero (Zmod n) := ⟨⟨0, h0.pos⟩⟩
+instance (n : ℕ) [h0 : pos_nat n] : has_zero (Zmod n) := ⟨⟨0, h0.pos⟩⟩
 
-private lemma one_mul_aux (n : ℕ) [h0 : pos n] : ∀ a : Zmod n, (1 : Zmod n) * a = a := 
+private lemma one_mul_aux (n : ℕ) [h0 : pos_nat n] : ∀ a : Zmod n, (1 : Zmod n) * a = a := 
 λ ⟨a, ha⟩, fin.eq_of_veq (show (1 % n * a) % n = a, 
 begin
   resetI,
@@ -75,7 +82,7 @@ instance (n : ℕ) : distrib (Zmod n) :=
   ..Zmod.add_comm_semigroup n,
   ..Zmod.comm_semigroup n }
 
-instance (n : ℕ) [h0 : pos n] : comm_ring (Zmod n) :=
+instance (n : ℕ) [h0 : pos_nat n] : comm_ring (Zmod n) :=
 { zero_add := λ ⟨a, ha⟩, fin.eq_of_veq (show (0 + a) % n = a, by rw zero_add; exact nat.mod_eq_of_lt ha),
   add_zero := λ ⟨a, ha⟩, fin.eq_of_veq (nat.mod_eq_of_lt ha),
   add_left_neg := 
@@ -95,7 +102,7 @@ instance (n : ℕ) [h0 : pos n] : comm_ring (Zmod n) :=
   ..Zmod.add_comm_semigroup n,
   ..Zmod.comm_semigroup n }
 
-@[simp] lemma val_zero (n : ℕ) [pos n] : (0 : Zmod n).val = 0 := rfl
+@[simp] lemma val_zero (n : ℕ) [pos_nat n] : (0 : Zmod n).val = 0 := rfl
 
 lemma add_val {n : ℕ} : ∀ a b : Zmod n, (a + b).val = (a.val + b.val) % n
 | ⟨_, _⟩ ⟨_, _⟩ := rfl
@@ -103,7 +110,7 @@ lemma add_val {n : ℕ} : ∀ a b : Zmod n, (a + b).val = (a.val + b.val) % n
 lemma mul_val {n : ℕ} :  ∀ a b : Zmod n, (a + b).val = (a.val + b.val) % n
 | ⟨_, _⟩ ⟨_, _⟩ := rfl
 
-lemma cast_val_nat {n : ℕ} [pos n] (a : ℕ) : (a : Zmod n).val = a % n :=
+lemma cast_val_nat {n : ℕ} [pos_nat n] (a : ℕ) : (a : Zmod n).val = a % n :=
 begin
   induction a with a ih,
   { rw [nat.zero_mod]; refl },
@@ -113,22 +120,23 @@ begin
     exact nat.modeq.modeq_add (nat.mod_mod a n) (nat.mod_mod 1 n) }
 end
 
-lemma mk_eq_cast {a n : ℕ} (h : a < n) [pos n] : (⟨a, h⟩ : Zmod n) = (a : Zmod n) :=
+lemma mk_eq_cast {a n : ℕ} (h : a < n) [pos_nat n] : (⟨a, h⟩ : Zmod n) = (a : Zmod n) :=
 fin.eq_of_veq (by rw [cast_val_nat, nat.mod_eq_of_lt h])
 
-@[simp] lemma cast_self_eq_zero (n : ℕ) [pos n] : (n : Zmod n) = 0 :=
+@[simp] lemma cast_self_eq_zero (n : ℕ) [pos_nat n] : (n : Zmod n) = 0 :=
 fin.eq_of_veq (show (n : Zmod n).val = 0, by simp [cast_val_nat])
 
-lemma cast_val_of_lt {a n : ℕ} (h : a < n) [pos n] : (a : Zmod n).val = a :=
+lemma cast_val_of_lt {a n : ℕ} (h : a < n) [pos_nat n] : (a : Zmod n).val = a :=
 by rw [cast_val_nat, nat.mod_eq_of_lt h]
 
-@[simp] lemma cast_nat_mod (n : ℕ) [pos n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
+@[simp] lemma cast_nat_mod (n : ℕ) [pos_nat n] (a : ℕ) : ((a % n : ℕ) : Zmod n) = a :=
 by conv {to_rhs, rw ← nat.mod_add_div a n}; simp
+#print cast_nat_mod
  
-@[simp] lemma cast_int_mod (n : ℕ) [pos n] (a : ℤ) : ((a % n : ℤ) : Zmod n) = a :=
+@[simp] lemma cast_int_mod (n : ℕ) [pos_nat n] (a : ℤ) : ((a % n : ℤ) : Zmod n) = a :=
 by conv {to_rhs, rw ← int.mod_add_div a n}; simp
 
-lemma cast_val_int (n : ℕ) [h0 : pos n] (a : ℤ) : (a : Zmod n).val = (a % n).nat_abs :=
+lemma cast_val_int (n : ℕ) [h0 : pos_nat n] (a : ℤ) : (a : Zmod n).val = (a % n).nat_abs :=
 have h : nat_abs (a % n) < n := int.coe_nat_lt.1 begin 
   rw [nat_abs_of_nonneg (mod_nonneg _ (int.coe_nat_ne_zero_of_pos h0.pos))],
   conv {to_rhs, rw ← abs_of_nonneg (int.coe_nat_nonneg n)},
@@ -146,12 +154,12 @@ instance Zmod_one.subsingleton : subsingleton (Zmod 1) :=
 instance Zmod_zero.subsingleton : subsingleton (Zmod 0) :=
 ⟨λ a, (nat.not_lt_zero _ a.2).elim⟩
 
-lemma eq_iff_modeq_nat {n : ℕ} [pos n] {a b : ℕ} : (a : Zmod n) = b ↔ a ≡ b [MOD n] :=
+lemma eq_iff_modeq_nat {n : ℕ} [pos_nat n] {a b : ℕ} : (a : Zmod n) = b ↔ a ≡ b [MOD n] :=
 ⟨λ h, by have := fin.veq_of_eq h;
   rwa [cast_val_nat, cast_val_nat] at this,
 λ h, fin.eq_of_veq $ by rwa [cast_val_nat, cast_val_nat]⟩
 
-lemma eq_iff_modeq_int {n : ℕ} [h0 : pos n] {a b : ℤ} : (a : Zmod n) = b ↔ a ≡ b [ZMOD n] :=
+lemma eq_iff_modeq_int {n : ℕ} [h0 : pos_nat n] {a b : ℤ} : (a : Zmod n) = b ↔ a ≡ b [ZMOD n] :=
 ⟨λ h, by have := fin.veq_of_eq h;
   rwa [cast_val_int, cast_val_int, ← int.coe_nat_eq_coe_nat_iff,
     nat_abs_of_nonneg (int.mod_nonneg _ (int.coe_nat_ne_zero_of_pos h0.pos)),
@@ -163,14 +171,14 @@ instance (n : ℕ) : fintype (Zmod n) := fin.fintype _
 
 lemma card_Zmod : ∀ n, fintype.card (Zmod n) = n := fintype.card_fin
 
-instance (n : ℕ) [pos n] : has_inv (Zmod n) := 
+instance (n : ℕ) [pos_nat n] : has_inv (Zmod n) := 
 ⟨λ a, gcd_a a.1 n⟩
 
 lemma gcd_a_modeq (a b : ℕ) : (a : ℤ) * gcd_a a b ≡ nat.gcd a b [ZMOD b] :=
 by rw [← add_zero ((a : ℤ) * _), gcd_eq_gcd_ab];
   exact int.modeq.modeq_add rfl (int.modeq.modeq_zero_iff.2 (dvd_mul_right _ _)).symm
 
-lemma mul_inv_eq_gcd (n a : ℕ) [pos n]: (a : Zmod n) * a⁻¹ = nat.gcd a n :=
+lemma mul_inv_eq_gcd (n a : ℕ) [pos_nat n]: (a : Zmod n) * a⁻¹ = nat.gcd a n :=
 by rw [← int.cast_coe_nat (nat.gcd _ _), nat.gcd_comm, nat.gcd_rec, ← eq_iff_modeq_int.2 (gcd_a_modeq _ _)];
   simp [has_inv.inv, cast_val_nat]
 

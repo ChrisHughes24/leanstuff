@@ -45,19 +45,6 @@ end
 
 namespace fintype
 
-instance quotient_fintype {α : Type*} [fintype α] (s : setoid α)
-  [decidable_eq (quotient s)] : fintype (quotient s) :=
-fintype.of_surjective quotient.mk (λ x, quotient.induction_on x (λ x, ⟨x, rfl⟩))
-
-instance finset_fintype [fintype α] : fintype (finset α) :=
-⟨finset.univ.powerset, λ x, finset.mem_powerset.2 (finset.subset_univ _)⟩
-
-instance set.fintype (α : Type u) [fintype α] [decidable_eq α] : fintype (set α) :=
-pi.fintype
-
-def subtype_fintype [fintype α] (p : α → Prop) [decidable_pred p] : fintype {x // p x} :=
-set_fintype _
-
 lemma card_eq_one_iff [fintype α] : card α = 1 ↔ (∃ x : α, ∀ y, y = x) :=
 by rw [← card_unit, card_eq]; exact
 ⟨λ ⟨a⟩, ⟨a.symm unit.star, λ y, a.bijective.1 (subsingleton.elim _ _)⟩, 
@@ -169,12 +156,12 @@ classical.by_contradiction (λ h, lt_irrefl (card t)
 end set
 
 local attribute [instance, priority 0] 
-  fintype.subtype_fintype set_fintype classical.prop_decidable
+  subtype.fintype set_fintype classical.prop_decidable
 
 section should_be_in_group_theory
 
 noncomputable instance [fintype G] (H : set G) [is_subgroup H] : 
-fintype (left_cosets H) := fintype.quotient_fintype (left_rel H)
+fintype (left_cosets H) := quotient.fintype (left_rel H)
 
 lemma card_eq_card_cosets_mul_card_subgroup [fintype G] (H : set G) [is_subgroup H] : 
   card G = card (left_cosets H) * card H :=
@@ -429,24 +416,24 @@ end group_action
 namespace sylow
 open group_action
 
-def mk_vector_prod_eq_one (n : ℕ) [Zmod.pos n] (v : Zmod n → G) : Zmod (n+1) → G := 
+def mk_vector_prod_eq_one (n : ℕ) [pos_nat n] (v : Zmod n → G) : Zmod (n+1) → G := 
 λ m, if h : m.1 < n then v m.1 else ((list.range n).map (λ m : ℕ, v (m : Zmod n))).prod⁻¹
 
-lemma mk_vector_prod_eq_one_injective {p : ℕ} [h0 : Zmod.pos p] : 
+lemma mk_vector_prod_eq_one_injective {p : ℕ} [h0 : pos_nat p] : 
   function.injective (@mk_vector_prod_eq_one G _ p _) := 
 λ x y hxy, funext (λ ⟨a, ha⟩, begin
   have : dite _ _ _ = dite _ _ _ := congr_fun hxy a,
-  rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_of_lt ha), 
+  rw [Zmod.cast_val_nat, nat.mod_eq_of_lt (nat.lt_succ_of_lt ha), 
     dif_pos ha, dif_pos ha] at this,
   rwa Zmod.mk_eq_cast
 end)
 
 /-- set of elements of G^n such that the product of the 
   list of elements of the vector is one -/
-def vectors_prod_eq_one (G : Type*) [group G] (n : ℕ) [Zmod.pos n] : set (Zmod n → G) := 
+def vectors_prod_eq_one (G : Type*) [group G] (n : ℕ) [pos_nat n] : set (Zmod n → G) := 
 {v | ((list.range n).map (λ m : ℕ, v (↑m : Zmod n))).prod = 1 }
 
-lemma mem_vectors_prod_eq_one_iff {n : ℕ} [Zmod.pos n] (v : Zmod (n + 1) → G) :
+lemma mem_vectors_prod_eq_one_iff {n : ℕ} [pos_nat n] (v : Zmod (n + 1) → G) :
   v ∈ vectors_prod_eq_one G (n + 1) ↔ v ∈ mk_vector_prod_eq_one n '' (set.univ : set (Zmod n → G)) :=
 have prod_lemma : ((list.range (n + 1)).map (λ m : ℕ, v (m : Zmod (n + 1)))).prod =
   list.prod (list.map (λ (m : ℕ), v ↑m) (list.range n)) * v ↑n :=
@@ -456,13 +443,13 @@ by rw [list.range_concat, list.map_append, list.prod_append,
   have h₁ : list.map (λ (m : ℕ), v ((m : Zmod n).val : Zmod (n+1))) (list.range n)
     = list.map (λ (m : ℕ), v m) (list.range n) := list.map_congr (λ m hm, 
   have hm' : m < n := list.mem_range.1 hm,  
-    by simp [Zmod.cast_val, nat.mod_eq_of_lt hm']),
+    by simp [Zmod.cast_val_nat, nat.mod_eq_of_lt hm']),
   ⟨λ m, v m.val, set.mem_univ _, funext (λ i, show dite _ _ _ = _, begin
     split_ifs,
     { refine congr_arg _ (fin.eq_of_veq _), 
-      simp [Zmod.cast_val, nat.mod_eq_of_lt h_1, nat.mod_eq_of_lt (nat.lt_succ_of_lt h_1)] },
+      simp [Zmod.cast_val_nat, nat.mod_eq_of_lt h_1, nat.mod_eq_of_lt (nat.lt_succ_of_lt h_1)] },
     { have hi : i = n := fin.eq_of_veq begin 
-        rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)],
+        rw [Zmod.cast_val_nat, nat.mod_eq_of_lt (nat.lt_succ_self _)],
         exact le_antisymm (nat.le_of_lt_succ i.2) (le_of_not_gt h_1),
       end,
       rw [h₁, hi, inv_eq_iff_mul_eq_one, ← prod_lemma, h] }
@@ -472,24 +459,24 @@ by rw [list.range_concat, list.map_append, list.prod_append,
   list.map_congr (λ k hk, 
     have hk' : k < n := list.mem_range.1 hk,
     hw.2 ▸ (show _ = dite _ _ _, 
-      by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_of_lt hk'), dif_pos hk'])),
+      by rw [Zmod.cast_val_nat, nat.mod_eq_of_lt (nat.lt_succ_of_lt hk'), dif_pos hk'])),
   begin
     show list.prod (list.map (λ (m : ℕ), v ↑m) (list.range (n + 1))) = 1,
     rw [prod_lemma, ← h, ← hw.2],
     show _ * dite _ _ _ = (1 : G),
-    rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _), dif_neg (lt_irrefl _),
+    rw [Zmod.cast_val_nat, nat.mod_eq_of_lt (nat.lt_succ_self _), dif_neg (lt_irrefl _),
       mul_inv_self],
   end⟩
 
 def rotate (α : Type v) (n : ℕ) (i : multiplicative (Zmod n)) (v : multiplicative (Zmod n) → α)
   (m : multiplicative (Zmod n)) := v (m * i) 
 
-instance rotate.is_group_action (n : ℕ) [Zmod.pos n] :
+instance rotate.is_group_action (n : ℕ) [pos_nat n] :
   is_group_action (rotate α n) :=
 { mul := λ x y v, funext (λ i, show v (i * (x * y)) = v (i * x * y), by rw mul_assoc),
   one := λ v, funext (λ i, show v (i * 1) = v i, by rw mul_one) }
 
-lemma fixed_points_rotate_eq_const {n : ℕ} [h0 : Zmod.pos n] {v : multiplicative (Zmod n) → G}
+lemma fixed_points_rotate_eq_const {n : ℕ} [h0 : pos_nat n] {v : multiplicative (Zmod n) → G}
   (h : v ∈ fixed_points (rotate G n)) (i j : multiplicative (Zmod n)) : v i = v j :=
 calc v i = v (j * i) : mul_comm i j ▸ (congr_fun ((mem_fixed_points'.1 h _) (mem_orbit (rotate G n) v j)) i).symm
 ... = v j : congr_fun ((mem_fixed_points'.1 h _) (mem_orbit (rotate G n) v i)) j
@@ -508,7 +495,7 @@ have h : ∀ b ∈ l, b = a := λ b hb, ha b (list.mem_cons_of_mem _ hb),
 have hb : b = a := ha b (list.mem_cons_self _ _),
 by simp [_root_.pow_add, list.prod_const h, hb]
 
-lemma rotate_on_vectors_prod_eq_one {n : ℕ} [h0 : Zmod.pos n] {v : Zmod n → G}
+lemma rotate_on_vectors_prod_eq_one {n : ℕ} [h0 : pos_nat n] {v : Zmod n → G}
   (hv : v ∈ vectors_prod_eq_one G n) (i : Zmod n) :
   (rotate G n) (i : Zmod n) v ∈ vectors_prod_eq_one G n :=
 begin
@@ -530,8 +517,7 @@ begin
       { simp [list.map_map, function.comp] },
       resetI,
       cases n,
-      { refine eq.trans _ ih,
-        simp [list.range, list.range_core]; congr },
+      { rw ← ih, congr },
       { have h : list.map (λ m : ℕ, v (↑m + (i + 1))) (list.range n) =
           list.map (λ m : ℕ, v (m + i)) (list.map succ (list.range n)),
         { simp [list.map_map, function.comp] },
@@ -545,19 +531,19 @@ begin
         simp } } }
 end
 
-def rotate_vectors_prod_eq_one (G : Type u) [group G] (n : ℕ) [Zmod.pos n] (i : multiplicative (Zmod n)) 
+def rotate_vectors_prod_eq_one (G : Type u) [group G] (n : ℕ) [pos_nat n] (i : multiplicative (Zmod n)) 
   (v : vectors_prod_eq_one G n) : vectors_prod_eq_one G n := ⟨rotate _ n i v.1, rotate_on_vectors_prod_eq_one v.2 _⟩
 
-instance (n : ℕ) [Zmod.pos n] : is_group_action (rotate_vectors_prod_eq_one G n) :=
+instance (n : ℕ) [pos_nat n] : is_group_action (rotate_vectors_prod_eq_one G n) :=
 { one := λ ⟨a, ha⟩, subtype.eq (is_group_action.one (rotate G n) _),
   mul := λ x y ⟨a, ha⟩, subtype.eq (is_group_action.mul (rotate G n) _ _ _) }
 
-lemma mem_fixed_points_rotate_vectors_prod_eq_one {n : ℕ} [Zmod.pos n]
+lemma mem_fixed_points_rotate_vectors_prod_eq_one {n : ℕ} [pos_nat n]
   : ∀ {v : vectors_prod_eq_one G n}, v ∈ fixed_points (rotate_vectors_prod_eq_one G n) ↔ (v : Zmod n → G) ∈ fixed_points (rotate G n) :=
 λ ⟨v, hv⟩, ⟨λ h x, subtype.mk.inj (h x), λ h x, subtype.eq (h x)⟩
 
 lemma fixed_points_rotate_pow_n [fintype G] {n : ℕ} (hn : nat.prime (succ n))
-  [h0 : Zmod.pos n] : ∀ {v : vectors_prod_eq_one G (succ n)}
+  [h0 : pos_nat n] : ∀ {v : vectors_prod_eq_one G (succ n)}
   (hv : v ∈ fixed_points (rotate_vectors_prod_eq_one G (succ n))), (v : Zmod (succ n) → G) 0 ^ (n + 1) = 1 :=
 λ ⟨v, hv₁⟩ hv,
 let ⟨w, hw⟩ := (mem_vectors_prod_eq_one_iff _).1 hv₁ in
@@ -581,14 +567,14 @@ begin
   simp, refl,
 end
 
-lemma one_mem_fixed_points_rotate [fintype G] {n : ℕ} [h0 : Zmod.pos n] :
+lemma one_mem_fixed_points_rotate [fintype G] {n : ℕ} [h0 : pos_nat n] :
   (1 : Zmod n → G) ∈ fixed_points (rotate G n) :=
 mem_fixed_points'.2 (λ y hy, funext (λ j,
   let ⟨i, hi⟩ := mem_orbit_iff.1 hy in
   have hj : (1 : G) = y j := congr_fun hi j,
     hj ▸ rfl))
 
-lemma one_mem_vectors_prod_eq_one (n : ℕ) [Zmod.pos n] : (1 : Zmod n → G) ∈ vectors_prod_eq_one G n :=
+lemma one_mem_vectors_prod_eq_one (n : ℕ) [pos_nat n] : (1 : Zmod n → G) ∈ vectors_prod_eq_one G n :=
 show list.prod (list.map (λ (m : ℕ), (1 : G)) (list.range n)) = 1,
 from have h : ∀ b : G, b ∈ list.map (λ (m : ℕ), (1 : G)) (list.range n) → b = 1 :=
 λ b hb, let ⟨_, h⟩ := list.mem_map.1 hb in h.2.symm,
@@ -601,9 +587,9 @@ lemma exists_prime_order_of_dvd_card [fintype G] {p : ℕ} (hp : nat.prime p)
 let n := p - 1 in
 have hn : p = n + 1 := nat.succ_sub hp.pos,
 have hnp : nat.prime (n + 1) := hn ▸ hp,
-have hn0 : Zmod.pos n := ⟨nat.lt_of_succ_lt_succ hnp.gt_one⟩,
+have hn0 : pos_nat n := ⟨nat.lt_of_succ_lt_succ hnp.gt_one⟩,
 have hlt : ¬(n : Zmod (n + 1)).val < n :=
-  not_lt_of_ge (by rw [Zmod.cast_val, nat.mod_eq_of_lt (nat.lt_succ_self _)]; 
+  not_lt_of_ge (by rw [Zmod.cast_val_nat, nat.mod_eq_of_lt (nat.lt_succ_self _)]; 
     exact le_refl _),
 have hcard1 : card (vectors_prod_eq_one G (n + 1)) = card (Zmod n → G) := 
   by rw [← set.card_univ (Zmod n → G), set.ext (@mem_vectors_prod_eq_one_iff _ _ _ hn0), 
@@ -612,7 +598,7 @@ have hcard : card (vectors_prod_eq_one G (n + 1)) = card G ^ n :=
   by conv { rw hcard1, to_rhs, rw ← card_fin n };
     exact fintype.card_fun,
 have fintype (multiplicative (Zmod (succ n))) := fin.fintype _,
-have Zmod.pos (succ n) := ⟨succ_pos _⟩,
+have pos_nat (succ n) := ⟨succ_pos _⟩,
 have hZmod : @fintype.card (multiplicative (Zmod (succ n))) (fin.fintype _) = 
   (n+1) ^ 1 := (nat.pow_one (n + 1)).symm ▸ card_fin _,
 by exactI

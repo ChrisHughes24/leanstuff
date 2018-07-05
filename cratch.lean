@@ -1,10 +1,33 @@
-import data.num.lemmas
-lemma e : 12402536340 * 2356324602 = 29224401505141036680 :=
+variables {α β γ : Type}
+
+-- function f is continuous at point x
+axiom continuous_at (x : α) (f : α → β) : Prop 
+
+def continuous (f : α → β) : Prop := ∀ x, continuous_at x f
+
+lemma continuous_comp (f : α → β) (g : β → γ) :
+  continuous f → continuous g → continuous (g ∘ f) :=
 begin
-  rw ← num.of_nat_inj,
-  simp [num.bit0_of_bit0, num.bit1_of_bit1],
-  refl
+  assume cf cg x,
+  unfold continuous at *,
+  have := cg (f x)
 end
+#exit
+import data.fintype data.num.lemmas tactic.norm_num data.real.basic
+#print prefix subsingleton
+
+@[elab_with_expected_type] lemma subsingleton_thing {α : Type*} [subsingleton α] {P : α → Prop} (a : α) 
+  (h : P a) (b : α) : P b :=
+by rwa subsingleton.elim b a
+
+example {α : Type*} [f₁ : fintype α] (h : fintype.card α = 0) (f₂ : fintype α) :
+  @fintype.card α f₂ = 0 :=
+@subsingleton_thing (fintype α) _ _ f₁ h _
+
+#print finset.product
+
+lemma e : (2 : ℝ) + 2 = 4 := rfl
+
 #print e
 #exit
 import data.equiv 
