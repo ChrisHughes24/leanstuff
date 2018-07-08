@@ -1,3 +1,84 @@
+import data.option order.bounded_lattice data.pfun
+
+lemma h (p : Prop) : ¬(p ↔ ¬p) := 
+λ h : p ↔ ¬p, 
+have not_p : ¬p := λ hp : p, h.1 hp hp,
+not_p (h.2 not_p)
+
+#print h
+
+def subfunc_to_option {α β: Type} {c: α → Prop} [decidable_pred c]
+(f: {x:α // c x} → β) : α → option β :=
+λ y: α, if h : c y then some (f (subtype.mk y h)) else none
+
+def option_to_subfunc {α β: Type} (f: α → (option β)) :
+  {x : α // option.is_some (f x)} → β | ⟨x, h⟩ := option.get h
+
+theorem inv1 {α β: Type} {c: α → Prop} (f: {x:α // c x} → β) [decidable_pred c] : 
+∀ y : {x // c x}, option_to_subfunc (@subfunc_to_option α β c _ f) ⟨y.1, sorry⟩ = f y := sorry
+#print roption
+def option_to_subfunc {α β: Type} (f: α → (option β)) :
+  {x : α // f x ≠ none} → β :=
+λ y: {x:α // f x ≠ none},
+match f y, y.2 with
+| some x, hfy := x
+| none  , hfy := (hfy rfl).elim
+end
+
+def subfunc_to_option {α β: Type} {c: α → Prop} [decidable_pred c] 
+(f: {x:α // c x} → β) : α → option β :=
+λ y: α, if h : c y then some (f (subtype.mk y h)) else none
+
+open lattice
+variable {α : Type*}
+
+lemma sup_eq_max [decidable_linear_order α] (a b : with_bot α) : a ⊔ b = max a b :=
+le_antisymm (sup_le (le_max_left _ _) (le_max_right _ _)) (max_le le_sup_left le_sup_right)
+
+lemma inf_eq_min [decidable_linear_order α] (a b : with_top α) : a ⊓ b = min a b :=
+le_antisymm (le_min inf_le_left inf_le_right) (le_inf (min_le_left _ _) (min_le_right _ _))
+
+#print subtype.eq
+
+#print subtype.eq
+
+lemma well_founded_lt_with_bot {α : Type*} [partial_order α] (h : well_founded ((<) : α → α → Prop)) :
+  well_founded ((<) : with_bot α → with_bot α → Prop) :=
+have acc_bot : acc ((<) : with_bot α → with_bot α → Prop) ⊥ :=
+  acc.intro _ (λ a ha, (not_le_of_gt ha bot_le).elim),
+⟨λ a, option.rec_on a acc_bot (λ a, acc.intro _ (λ b, option.rec_on b (λ _, acc_bot)
+(λ b, well_founded.induction h b 
+  (show ∀ b : α, (∀ c, c < b → (c : with_bot α) < a → 
+      acc ((<) : with_bot α → with_bot α → Prop) c) → (b : with_bot α) < a → 
+        acc ((<) : with_bot α → with_bot α → Prop) b,
+  from λ b ih hba, acc.intro _ (λ c, option.rec_on c (λ _, acc_bot) 
+    (λ c hc, ih _ (with_bot.some_lt_some.1 hc) (lt_trans hc hba)))))))⟩
+
+lemma well_founded_lt_with_top {α : Type*} [partial_order α] (h : well_founded ((<) : α → α → Prop)) :
+  well_founded ((<) : with_top α → with_top α → Prop) :=
+have acc_some : ∀ a : α, acc ((<) : with_top α → with_top α → Prop) (some a) :=
+λ a, acc.intro _ (well_founded.induction h a
+  (show ∀ b, (∀ c, c < b → ∀ d : with_top α, d < some c → acc (<) d) →
+    ∀ y : with_top α, y < some b → acc (<) y,
+  from λ b ih c, option.rec_on c (λ hc, (not_lt_of_ge lattice.le_top hc).elim)
+    (λ c hc, acc.intro _ (ih _ (with_top.some_lt_some.1 hc))))),
+⟨λ a, option.rec_on a (acc.intro _ (λ y, option.rec_on y (λ h, (lt_irrefl _ h).elim)
+  (λ _ _, acc_some _))) acc_some⟩
+
+#exit
+
+variables {α : Type}
+
+def preimage (f : α → ℕ) (u : ℕ) : set α  := λ x, f x=u
+
+instance [fintype α] [decidable_eq α] (f : α → ℕ) (u : ℕ) : fintype (preimage f u) :=
+by unfold preimage; apply_instance
+
+def card_image [fintype α] [decidable_eq α] (f : α → ℕ) (u : ℕ) : ℕ :=
+fintype.card (preimage f u)
+
+
+#exit
 variables {α β γ : Type}
 
 -- function f is continuous at point x
