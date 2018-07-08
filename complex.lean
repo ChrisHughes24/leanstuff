@@ -58,7 +58,7 @@ def I : ℂ := ⟨0, 1⟩
 
 instance : has_add ℂ := ⟨λ z w, ⟨z.re + w.re, z.im + w.im⟩⟩
 
-lemma add_def (a b c d : ℝ) : (⟨a, b⟩ : ℂ) + ⟨c, d⟩ = ⟨a + c, b + d⟩ := rfl
+@[simp] lemma add_def (a b c d : ℝ) : (⟨a, b⟩ : ℂ) + ⟨c, d⟩ = ⟨a + c, b + d⟩ := rfl
 @[simp] lemma add_re (z w : ℂ) : (z + w).re = z.re + w.re := rfl
 @[simp] lemma add_im (z w : ℂ) : (z + w).im = z.im + w.im := rfl
 @[simp] lemma of_real_add (r s : ℝ) : ((r + s : ℝ) : ℂ) = r + s := rfl
@@ -68,14 +68,14 @@ lemma add_def (a b c d : ℝ) : (⟨a, b⟩ : ℂ) + ⟨c, d⟩ = ⟨a + c, b + 
 
 instance : has_neg ℂ := ⟨λ z, ⟨-z.re, -z.im⟩⟩
 
-lemma neg_def (a b : ℝ) : -(⟨a, b⟩ : ℂ) = ⟨-a, -b⟩ := rfl
+@[simp] lemma neg_def (a b : ℝ) : -(⟨a, b⟩ : ℂ) = ⟨-a, -b⟩ := rfl
 @[simp] lemma neg_re (z : ℂ) : (-z).re = -z.re := rfl
 @[simp] lemma neg_im (z : ℂ) : (-z).im = -z.im := rfl
 @[simp] lemma of_real_neg (r : ℝ) : ((-r : ℝ) : ℂ) = -r := ext_iff.2 $ by simp
 
 instance : has_mul ℂ := ⟨λ z w, ⟨z.re * w.re - z.im * w.im, z.re * w.im + z.im * w.re⟩⟩
 
-lemma mul_def (a b c d : ℝ) : (⟨a, b⟩ : ℂ) * ⟨c, d⟩ = ⟨a * c - b * d, a * d - b * c⟩ := rfl
+@[simp] lemma mul_def (a b c d : ℝ) : (⟨a, b⟩ : ℂ) * ⟨c, d⟩ = ⟨a * c - b * d, a * d + b * c⟩ := rfl
 @[simp] lemma mul_re (z w : ℂ) : (z * w).re = z.re * w.re - z.im * w.im := rfl
 @[simp] lemma mul_im (z w : ℂ) : (z * w).im = z.re * w.im + z.im * w.re := rfl
 @[simp] lemma of_real_mul (r s : ℝ) : ((r * s : ℝ) : ℂ) = r * s := ext_iff.2 $ by simp
@@ -88,7 +88,7 @@ ext_iff.2 $ by simp
 
 def conj (z : ℂ) : ℂ := ⟨z.re, -z.im⟩
 
-lemma conj_def (a b : ℝ) : conj ⟨a, b⟩ = ⟨a, -b⟩
+@[simp] lemma conj_def (a b : ℝ) : conj ⟨a, b⟩ = ⟨a, -b⟩ := rfl
 @[simp] lemma conj_re (z : ℂ) : (conj z).re = z.re := rfl
 @[simp] lemma conj_im (z : ℂ) : (conj z).im = -z.im := rfl
 
@@ -215,6 +215,9 @@ noncomputable instance : discrete_field ℂ :=
   inv_zero := inv_zero,
   has_decidable_eq := classical.dec_eq _,
   ..complex.comm_ring }
+
+@[simp] lemma of_real_pow (r : ℝ) (n : ℕ) : ((r ^ n : ℝ) : ℂ) = r ^ n :=
+by induction n; simp [pow_succ, *]
 
 @[simp] lemma of_real_div (r s : ℝ) : ((r / s : ℝ) : ℂ) = r / s :=
 by rw [division_def, of_real_mul, division_def, of_real_inv]
