@@ -4,7 +4,7 @@ lemma h (p : Prop) : ¬(p ↔ ¬p) :=
 λ h : p ↔ ¬p, 
 have not_p : ¬p := λ hp : p, h.1 hp hp,
 not_p (h.2 not_p)
-
+cvfx
 #print h
 
 def subfunc_to_option {α β: Type} {c: α → Prop} [decidable_pred c]
