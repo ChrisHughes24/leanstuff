@@ -18,24 +18,10 @@ class game (α : Type*) extends has_well_founded α :=
 (not_boring : max_score > 1)
 (final_score : Π {a}, legal_moves a = ∅ → fin max_score)
 
-lemma multiset.cons_ne_zero {α : Type*} (a : α) (s : multiset α) : a :: s ≠ 0 :=
-(ne_of_lt (lt_of_le_of_lt (multiset.zero_le s) (multiset.lt_cons_self _ _))).symm
-
-instance multiset.decidable_eq_zero {α : Type*} (s : multiset α) : decidable (s = 0) :=
-multiset.rec_on s (is_true rfl) (λ a s h, is_false (multiset.cons_ne_zero _ _))
-$ λ a b s h, have h₁ : (a :: b :: s = ∅) = (b :: a :: s = ∅), 
-  from multiset.cons_swap a b s ▸ rfl,
-@eq.drec_on Prop (b :: a :: s = ∅)
-(λ hd h, @is_false hd (h ▸ (multiset.cons_ne_zero _ _)) == @is_false (b :: a :: s = ∅)
-(multiset.cons_ne_zero _ _)) (a :: b :: s = ∅) h₁.symm (heq.refl _)
-
-instance finset.decidable_eq_empty {α : Type*} (s : finset α) : decidable (s = ∅) :=
-decidable_of_iff (s.1 = 0) ⟨λ h, finset.eq_of_veq h, λ h, h.symm ▸ rfl⟩
-
 namespace game
 
 open well_founded finset list
-variables {α : Type*} [g : game α]
+variables {α : Type*} [g : game α] [decidable_eq α]
 include g
 
 def is_legal_move (a b : α) := ∃ h : b ≺ a ∧ side_to_move b = bnot (side_to_move a), 
@@ -79,7 +65,7 @@ def win (s : bool) : fin g.max_score := bool.cases_on s
 lemma win_better (s : bool) (sc : fin g.max_score) : better s (win s) sc :=
 bool.cases_on s (nat.zero_le _) (nat.le_of_succ_le_succ $
 show nat.succ sc.1 ≤ nat.succ (nat.pred (max_score α)),
-  by rw nat.succ_pred_eq_of_pos max_score_pos; exact sc.2)
+  begin rw nat.succ_pred_eq_of_pos max_score_pos, exact sc.2, end)
 
 lemma eq_win_of_better_win {s : bool} {sc : fin g.max_score} : better s sc (win s) → sc = win s :=
 bool.cases_on s (λ h, fin.eq_of_veq $ le_antisymm h (win_better ff _))
@@ -139,7 +125,7 @@ bool.cases_on s (fin.ne_of_vne $ ne_of_lt $ nat.lt_pred_of_succ_lt $ not_boring 
 end game
 open game well_founded fintype list finset
 def nim := ℕ × bool
-
+#print forall_eq
 instance : game nim :=
 { to_has_well_founded := ⟨_, measure_wf prod.fst⟩,
   start_position := ⟨21, tt⟩,

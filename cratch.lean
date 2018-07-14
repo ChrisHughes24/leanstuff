@@ -1,4 +1,782 @@
-import data.option order.bounded_lattice data.pfun
+import logic.function
+open function
+
+def f : (thunk ℕ) → ℕ  := λ _, 0
+
+def g : ℕ → ℕ := λ _, 0
+
+#print thunk
+
+#eval f ((99 : ℕ) ^ 99 ^ 99) 
+
+#eval g (99 ^ 99 ^ 99 ^ 99 ^ 99)
+
+
+structure g :=
+(α : Type)
+(f : α → bool)
+
+#print tactic.exact
+
+def gafd (p q : Prop) [decidable p] [decidable q] :
+  decidable (p → q) := by apply_instance
+#print forall_prop_decidable
+
+
+def h {α : Sort*} (f : α → α → ℕ) : ¬ surjective f :=
+λ h, let ⟨a, ha⟩ := h (λ a, nat.succ (f a a)) in begin
+  have : f a a = nat.succ (f a a) := congr_fun ha _,
+  exact nat.succ_ne_self _ this.symm,
+
+end
+#print h
+
+
+#exit
+import data.multiset
+
+def value_aux' (N_min : multiset ℕ → ℕ) : multiset ℕ → multiset ℕ → ℕ
+| C L := N_min (multiset.pmap
+  (λ a (h : a ∈ C),
+    have multiset.card (C.erase a) < multiset.card C,
+      from multiset.card_lt_of_lt (multiset.erase_lt.2 h),
+    a - 2 + int.nat_abs (2 - value_aux' (C.erase a) L))
+    C (λ _,id) + multiset.pmap
+  (λ a (h : a ∈ L),
+    have multiset.card (L.erase a) < multiset.card L,
+      from multiset.card_lt_of_lt (multiset.erase_lt.2 h),
+    a - 4 +int.nat_abs (4 - value_aux' C (L.erase a)))
+    L (λ _,id))
+using_well_founded {rel_tac := λ _ _, 
+  `[exact ⟨_, measure_wf (λ CL, multiset.card CL.fst + multiset.card CL.snd)⟩]}
+
+set_option pp.proofs true
+#print value_aux'._main._pack
+#exit
+example (C : multiset ℕ) : decidable (∃ a : ℕ, a ≥ 4 ∧ a ∈ C) :=
+suffices this : decidable (∃ a ∈ C, a ≥ 4),
+by { resetI, apply @decidable_of_iff _ _ _ this, apply exists_congr, intro, tauto },
+by { apply_instance }
+
+set_option pp.implicit true
+instance decidable_exists_multiset {α : Type*} (s : multiset α) (p : α → Prop) [decidable_pred p] :
+  decidable (∃ x ∈ s, p x) := 
+quotient.rec_on s list.decidable_exists_mem (λ a b h, subsingleton.elim _ _)
+
+example (C : multiset ℕ) : decidable (∃ a : ℕ, a ≥ 4 ∧ a ∈ C) := 
+decidable_of_iff (∃ a ∈ quotient.out C, a ≥ 4) (⟨λ ⟨x, hx₁, hx₂⟩, ⟨x, hx₂, begin 
+  rw ← quotient.out_eq C,
+  exact hx₁,
+end⟩, λ ⟨x, hx₁, hx₂⟩, ⟨x, begin 
+  rw ← quotient.out_eq C at hx₂,
+  exact ⟨ hx₂, hx₁⟩
+end⟩⟩)  
+
+#exit
+import data.num.basic import tactic.basic data.num.lemmas data.list.basic data.complex.basic
+open tactic
+
+namespace ring_tac
+open tactic
+
+-- We start by modelling polynomials as lists of integers. Note that znum
+-- is basically the same as int, but optimised for computations.
+
+-- The list [a0,a1,...,an] represents a0 + a1*x + a2*x^2 + ... +an*x^n
+
+def poly := list znum
+
+-- We now make basic definitions and prove basic lemmas about addition of polynomials,
+-- multiplication of a polynomial by a scalar, and multiplication of polynomials.
+
+def poly.add : poly → poly → poly
+| [] g := g
+| f [] := f
+| (a :: f') (b :: g') := (a + b) :: poly.add f' g'
+
+@[simp] lemma poly.zero_add (p : poly) : poly.add [] p = p := by cases p; refl
+
+def poly.smul : znum → poly → poly
+| _ [] := []
+| z (a :: f') := (z * a) :: poly.smul z f'
+
+def poly.mul : poly → poly → poly
+| [] _ := []
+| (a :: f') g := poly.add (poly.smul a g) (0 :: poly.mul f' g)
+
+def poly.const : znum → poly := λ z, [z]
+
+def poly.X : poly := [0,1]
+
+-- One problem with our implementation is that the lists [1,2,3] and [1,2,3,0] are different
+-- list, but represent the same polynomial. So we define an "is_equal" predicate.
+
+def poly.is_eq_aux : list znum -> list znum -> bool
+| [] [] := tt 
+| [] (h₂ :: t₂) := if (h₂ = 0) then poly.is_eq_aux [] t₂ else ff 
+| (h₁ :: t₁) [] := if (h₁ = 0) then poly.is_eq_aux t₁ [] else ff
+| (h₁ :: t₁) (h₂ :: t₂) := if (h₁ = h₂) then poly.is_eq_aux t₁ t₂ else ff
+
+def poly.is_eq : poly → poly → bool := poly.is_eq_aux 
+
+-- evaluation of a polynomial at some element of a commutative ring.
+def poly.eval {α} [comm_ring α] (X : α) : poly → α
+| [] := 0
+| (n::l) := n + X * poly.eval l
+
+-- Lemmas saying that evaluation plays well with addition, multiplication, polynomial equality etc
+
+@[simp] lemma poly.eval_zero {α} [comm_ring α] (X : α) : poly.eval X [] = 0 := rfl
+
+@[simp] theorem poly.eval_add {α} [comm_ring α] (X : α) : ∀ p₁ p₂ : poly,
+  (p₁.add p₂).eval X = p₁.eval X + p₂.eval X :=
+begin
+  intro p₁,
+  induction p₁ with h₁ t₁ H,
+    -- base case
+    intros,simp [poly.eval],
+  -- inductive step
+  intro p₂,
+  cases p₂ with h₂ t₂,
+    simp [poly.add],
+  unfold poly.eval poly.add,
+  rw (H t₂),
+  simp [mul_add]
+end
+
+@[simp] lemma poly.eval_mul_zero {α} [comm_ring α] (f : poly) (X : α) :
+  poly.eval X (poly.mul f []) = 0 :=
+begin
+  induction f with h t H,
+    refl,
+  unfold poly.mul poly.smul poly.add poly.mul poly.eval,
+  rw H,simp
+end
+
+@[simp] lemma poly.eval_smul {α} [comm_ring α] (X : α) (z : znum) (f : poly) :
+  poly.eval X (poly.smul z f) = z * poly.eval X f :=
+begin
+  induction f with h t H, simp [poly.smul,poly.eval,mul_zero],
+  unfold poly.smul poly.eval,
+  rw H,
+  simp [mul_add,znum.cast_mul,mul_assoc,mul_comm]
+end
+
+@[simp] theorem poly.eval_mul {α} [comm_ring α] (X : α) : ∀ p₁ p₂ : poly,
+  (p₁.mul p₂).eval X = p₁.eval X * p₂.eval X :=
+begin
+  intro p₁,induction p₁ with h₁ t₁ H,
+    simp [poly.mul],
+  intro p₂,
+  unfold poly.mul,
+  rw poly.eval_add,
+  unfold poly.eval,
+  rw [H p₂,znum.cast_zero,zero_add,add_mul,poly.eval_smul,mul_assoc]
+end
+
+@[simp] theorem poly.eval_const {α} [comm_ring α] (X : α) : ∀ n : znum,
+  (poly.const n).eval X = n :=
+begin
+  intro n,
+  unfold poly.const poly.eval,simp
+end
+
+@[simp] theorem poly.eval_X {α} [comm_ring α] (X : α) : poly.X.eval X = X :=
+begin
+  unfold poly.X poly.eval,simp
+end
+
+-- Different list representing the same polynomials evaluate to the same thing
+theorem poly.eval_is_eq {α} [comm_ring α] (X : α) {p₁ p₂ : poly} : 
+  poly.is_eq p₁ p₂ → p₁.eval X = p₂.eval X := 
+begin
+  revert p₂,
+  induction p₁ with h₁ t₁ H₁,
+  { intros p₂ H,
+    induction p₂ with h₁ t₁ H₂,refl,
+    unfold poly.eval,
+    unfold poly.is_eq poly.is_eq_aux at H,
+    split_ifs at H,swap,cases H,
+    rw [h,←H₂ H],
+    simp },
+  { intros p₂ H,
+    induction p₂ with h₂ t₂ H₂,
+    { unfold poly.eval,
+      unfold poly.is_eq poly.is_eq_aux at H,
+      split_ifs at H,swap,cases H,
+      rw [h,H₁ H],
+      simp },
+    { unfold poly.eval,
+      unfold poly.is_eq poly.is_eq_aux at H,
+      split_ifs at H,swap,cases H,
+      unfold poly.is_eq at H₂,
+      rw [h,H₁ H] } } 
+    
+end 
+
+-- That's the end of the poly interface. We now prepare for the reflection.
+
+-- First an abstract version of polynomials (where equality is harder to test, and we won't
+-- need to test it). We'll construct a term of this type from (x+1)*(x+1)*(x+1)
+
+-- fancy attribute because we will be using reflection in meta-land
+@[derive has_reflect]
+inductive ring_expr : Type
+| add : ring_expr → ring_expr → ring_expr
+| mul : ring_expr → ring_expr → ring_expr
+| const : znum → ring_expr
+| X : ring_expr
+-- Now a "reflection" of this abstract type which the VM can play with.
+meta def reflect_expr (X : expr) : expr → option ring_expr
+| `(%%e₁ + %%e₂) := do
+  p₁ ← reflect_expr e₁,
+  p₂ ← reflect_expr e₂,
+  return (ring_expr.add p₁ p₂)
+| `(%%e₁ * %%e₂) := do
+  p₁ ← reflect_expr e₁,
+  p₂ ← reflect_expr e₂,
+  return (ring_expr.mul p₁ p₂)
+| e := if e = X then return ring_expr.X else
+  do n ← expr.to_int e,
+    return (ring_expr.const (znum.of_int' n))
+
+-- turning the abstract poly into a concrete list of coefficients.
+def to_poly : ring_expr → poly
+| (ring_expr.add e₁ e₂) := (to_poly e₁).add (to_poly e₂)
+| (ring_expr.mul e₁ e₂) := (to_poly e₁).mul (to_poly e₂)
+| (ring_expr.const z) := poly.const z
+| ring_expr.X := poly.X
+
+-- evaluating the abstract poly
+def ring_expr.eval {α} [comm_ring α] (X : α) : ring_expr → α
+| (ring_expr.add e₁ e₂) := e₁.eval + e₂.eval
+| (ring_expr.mul e₁ e₂) := e₁.eval * e₂.eval
+| (ring_expr.const z) := z
+| ring_expr.X := X
+
+-- evaluating the abstract and the concrete polynomial gives the same answer
+theorem to_poly_eval {α} [comm_ring α] (X : α) (e) : (to_poly e).eval X = e.eval X :=
+by induction e; simp [to_poly, ring_expr.eval, *]
+
+-- The big theorem! If the concrete polys are equal then the abstract ones evaluate
+-- to the same value. 
+theorem main_thm {α} [comm_ring α] (X : α) (e₁ e₂) {x₁ x₂}
+  (H : poly.is_eq (to_poly e₁) (to_poly e₂)) (R1 : e₁.eval X = x₁) (R2 : e₂.eval X = x₂) : x₁ = x₂ :=
+by rw [← R1, ← R2, ← to_poly_eval,poly.eval_is_eq X H, to_poly_eval]
+
+-- Now here's the tactic! It takes as input the unknown but concrete variable x
+-- and an expression f(x)=g(x),
+-- creates abstract polys f(X) and g(X), proves they're equal using rfl,
+-- and then applies the main theorem to deduce f(x)=g(x).
+
+meta def ring_tac (X : pexpr) : tactic unit := do
+  X ← to_expr X,
+  `(%%x₁ = %%x₂) ← target,
+  r₁ ← reflect_expr X x₁,
+  r₂ ← reflect_expr X x₂,
+  let e₁ : expr := reflect r₁,
+  let e₂ : expr := reflect r₂,
+  `[refine main_thm %%X %%e₁ %%e₂ rfl _ _],
+  all_goals `[simp only [ring_expr.eval,
+    znum.cast_pos, znum.cast_neg, znum.cast_zero',
+    pos_num.cast_bit0, pos_num.cast_bit1,
+    pos_num.cast_one']]
+
+example (x : ℤ) : (x + 1) * (x + 1) = x*x+2*x+1 := by do ring_tac ```(x)
+
+example (x : ℤ) : (x + 1) * (x + 1) * (x + 1) = x*x*x+3*x*x+3*x+1 := by do ring_tac ```(x) 
+
+example (x : ℤ) : (x + 1) + ((-1)*x + 1) = 2 := by do ring_tac ```(x) 
+
+end ring_tac
+
+def poly := list znum
+
+def poly.add : poly → poly → poly
+| [] g := g
+| f [] := f
+| (a :: f') (b :: g') := (a + b) :: poly.add f' g'
+
+def poly.eval {α} [comm_ring α] (X : α) : poly → α
+| [] := 0
+| (n::l) := n + X * poly.eval l
+
+#exit
+open expr tactic classical
+
+
+section logical_equivalences
+local attribute [instance] prop_decidable
+variables {a b : Prop}
+theorem not_not_iff (a : Prop) : ¬¬a ↔ a :=
+iff.intro classical.by_contradiction not_not_intro
+theorem implies_iff_not_or (a b : Prop) : (a → b) ↔ (¬ a ∨ b) :=
+iff.intro
+(λ h, if ha : a then or.inr (h ha) else or.inl ha)
+(λ h, or.elim h (λ hna ha, absurd ha hna) (λ hb ha, hb))
+theorem not_and_of_not_or_not (h : ¬ a ∨ ¬ b) : ¬ (a ∧ b) :=
+assume ⟨ha, hb⟩, or.elim h (assume hna, hna ha) (assume hnb, hnb hb)
+theorem not_or_not_of_not_and (h : ¬ (a ∧ b)) : ¬ a ∨ ¬ b :=
+if ha : a then
+or.inr (show ¬ b, from assume hb, h ⟨ha, hb⟩)
+else
+or.inl ha
+theorem not_and_iff (a b : Prop) : ¬ (a ∧ b) ↔ ¬a ∨ ¬b :=
+iff.intro not_or_not_of_not_and not_and_of_not_or_not
+theorem not_or_of_not_and_not (h : ¬ a ∧ ¬ b) : ¬ (a ∨ b) :=
+assume h1, or.elim h1 (assume ha, h^.left ha) (assume hb, h^.right hb)
+theorem not_and_not_of_not_or (h : ¬ (a ∨ b)) : ¬ a ∧ ¬ b :=
+and.intro (assume ha, h (or.inl ha)) (assume hb, h (or.inr hb))
+
+theorem not_or_iff (a b : Prop) : ¬ (a ∨ b) ↔ ¬ a ∧ ¬ b :=
+iff.intro not_and_not_of_not_or not_or_of_not_and_not
+end logical_equivalences
+
+meta def normalize_hyp (lemmas : list expr) (hyp : expr) : tactic unit :=
+do try (simp_at hyp lemmas)
+
+meta def normalize_hyps : tactic unit :=
+do hyps ← local_context,
+lemmas ← monad.mapm mk_const [``iff_iff_implies_and_implies,
+``implies_iff_not_or, ``not_and_iff, ``not_or_iff, ``not_not_iff,
+``not_true_iff, ``not_false_iff],
+monad.for' hyps (normalize_hyp lemmas)
+
+#exit
+def bind_option {X : Type} {Y : Type} :
+  option X → (X → option Y) → option Y
+| option.none f := @option.none Y
+| (option.some x) f := f x
+
+#print option.bind
+
+lemma pierce_em : (∀ p q : Prop, ((p → q) → p) → p) ↔ (∀ p, p ∨ ¬p) :=
+⟨λ pierce p, pierce (p ∨ ¬p) (¬p) (λ h, or.inr (λ hp, h (or.inl hp) hp)),
+λ em p q, (em p).elim (λ hp _, hp)
+  (λ h h₁, h₁ $ (em q).elim (λ hq _, hq) (λ h₂ hp, (h hp).elim))⟩
+
+#print axioms pierce_em
+
+lemma double_neg_em : (∀ p, ¬¬p → p) ↔ (∀ p, p ∨ ¬p) :=
+⟨λ dneg p, dneg _ (λ h, h (or.inr (h ∘ or.inl))),
+λ em p hneg, (em p).elim id (λ h, (hneg h).elim)⟩
+
+#print axioms double_neg_em
+
+lemma demorgan_em : (∀ p q, ¬ (¬p ∧ ¬q) → p ∨ q) ↔ (∀ p, p ∨ ¬p) :=
+⟨λ h p, h p (¬p) (λ h, h.2 h.1), 
+λ em p q h, (em p).elim or.inl $ λ not_p, (em q).elim or.inr 
+  (λ not_q, (h ⟨not_p, not_q⟩).elim)⟩
+
+#print axioms demorgan_em
+
+lemma implies_to_or_em : (∀ p q, (p → q) → (¬p ∨ q)) ↔ (∀ p, p ∨ ¬p) :=
+⟨λ h p, or.symm $ h p p id,
+λ em p q hpq, (em p).elim (or.inr ∘ hpq) or.inl⟩
+
+#print axioms implies_to_or_em
+
+#exit
+import logic.function data.equiv.basic
+open function
+universe u
+axiom exists_inv_of_bijection {α β : Sort*} {f : α → β}
+  (hf : bijective f) : ∃ g : β → α, left_inverse f g ∧ right_inverse f g
+
+axiom em2 (p : Prop) : p ∨ ¬p
+
+lemma choice2 {α : Sort*} : nonempty (nonempty α → α) :=
+(em2 (nonempty α)).elim
+(λ ⟨a⟩, ⟨λ _, a⟩) (λ h, ⟨false.elim ∘ h⟩)
+
+lemma choice3 : nonempty (Π {α : Sort u}, nonempty α → α) :=
+(em2 (nonempty (Π {α : Sort u}, nonempty α → α))).elim id 
+(λ h, begin
+  
+end)
+
+
+lemma choice_equiv : 
+  (∀ {α : Sort*}, nonempty (nonempty α → α)) → (nonempty)
+
+lemma exists_inv_of_bijection {α β : Sort*} {f : α → β}
+  (hf : bijective f) : ∃ g : β → α, left_inverse f g ∧ right_inverse f g :=
+have hchoice : ∀ b : β, nonempty (nonempty {a : α // f a = b} → {a : α // f a = b}) :=
+  λ b, choice2,
+let choice : Π b : β, nonempty {a : α // f a = b} → {a : α // f a = b} := 
+λ b, begin end in
+
+let f : Π b : β, {a : α // f a = b} := λ b, begin end,
+begin
+  cases hf,
+
+
+end
+
+example {α : Sort*} : nonempty (nonempty α → α) :=
+begin
+
+end
+
+lemma em2 {p : Prop} : p ∨ ¬p :=
+let U : Prop → Prop := λ q, q = true ∨ p in
+let V : Prop → Prop := λ q, q = false ∨ p in
+
+have u : subtype U := ⟨true, or.inl rfl⟩,
+have v : subtype V := ⟨false, or.inl rfl⟩,
+have not_uv_or_p : u.1 ≠ v.1 ∨ p :=
+  u.2.elim (v.2.elim (λ h₁ h₂, h₁.symm ▸ h₂.symm ▸ or.inl (λ htf, htf ▸ ⟨⟩))
+  (λ hp _, or.inr hp)) or.inr,
+have p_implies_uv : p → u.1 = v.1 := λ hp,
+have U = V := funext (assume x : Prop,
+  have hl : (x = true ∨ p) → (x = false ∨ p), from
+    assume a, or.inr hp,
+  have hr : (x = false ∨ p) → (x = true ∨ p), from
+    assume a, or.inr hp,
+  show (x = true ∨ p) = (x = false ∨ p), from
+    propext (iff.intro hl hr)),
+begin
+  
+end,
+begin
+  
+end,
+not_uv_or_p.elim
+  (λ h, or.inr $ mt p_implies_uv h)
+  or.inl
+
+
+
+
+#exit
+import tactic.interactive
+namespace tactic
+
+
+
+run_cmd mk_simp_attr `norm_num2
+
+lemma two_add_three : 2 + 3 = 4 := sorry
+
+attribute [norm_num2] two_add_three
+
+meta def norm_num2 : tactic unit :=
+  do simp_all
+
+meta def generalize_proofs (ns : list name) : tactic unit :=
+do intros_dep,
+   hs ← local_context >>= mfilter is_proof,
+   t ← target,
+   collect_proofs_in t [] (ns, hs) >> skip
+
+theorem not_not_iff (a : Prop) : ¬¬a ↔ a :=
+iff.intro classical.by_contradiction not_not_intro
+
+theorem implies_iff_not_or (a b : Prop) : (a → b) ↔ (¬ a ∨ b) :=
+iff.intro
+(λ h, if ha : a then or.inr (h ha) else or.inl ha)
+(λ h, or.elim h (λ hna ha, absurd ha hna) (λ hb ha, hb))
+
+theorem not_and_of_not_or_not (h : ¬ a ∨ ¬ b) : ¬ (a ∧ b) :=
+assume ⟨ha, hb⟩, or.elim h (assume hna, hna ha) (assume hnb, hnb hb)
+
+theorem not_or_not_of_not_and (h : ¬ (a ∧ b)) : ¬ a ∨ ¬ b :=
+if ha : a then
+or.inr (show ¬ b, from assume hb, h ⟨ha, hb⟩)
+else
+or.inl ha
+
+theorem not_and_iff (a b : Prop) : ¬ (a ∧ b) ↔ ¬a ∨ ¬b :=
+iff.intro not_or_not_of_not_and not_and_of_not_or_not
+
+theorem not_or_of_not_and_not (h : ¬ a ∧ ¬ b) : ¬ (a ∨ b) :=
+assume h1, or.elim h1 (assume ha, h^.left ha) (assume hb, h^.right hb)
+
+theorem not_and_not_of_not_or (h : ¬ (a ∨ b)) : ¬ a ∧ ¬ b :=
+and.intro (assume ha, h (or.inl ha)) (assume hb, h (or.inr hb))
+
+theorem not_or_iff (a b : Prop) : ¬ (a ∨ b) ↔ ¬ a ∧ ¬ b :=
+iff.intro not_and_not_of_not_or not_or_of_not_and_not
+end logical_equivalences
+
+meta def normalize_hyp (lemmas : simp_lemmas) (lemmas2 : list name) (hyp : expr) : tactic unit :=
+do try (simp_hyp lemmas lemmas2 hyp)
+
+meta def normalize_hyps : tactic unit :=
+do hyps ← local_context,
+lemmas ← monad.mapm mk_const [``iff_iff_implies_and_implies,
+``implies_iff_not_or, ``not_and_iff, ``not_not_iff,
+``not_true_iff, ``not_false_iff],
+ hyps (normalize_hyp lemmas)
+
+
+open tactic
+universe u
+
+meta def find_same_type : expr → list expr → tactic expr
+| e [] := failed
+| e (h :: hs) :=
+do t ← infer_type h,
+(unify e t >> return h) <|> find_same_type e hs
+
+meta def assumption : tactic unit :=
+do ctx ← local_context,
+t ← target,
+h ← tactic.find_same_type t ctx,
+exact h
+<|> fail "assumption tactic failed"
+
+#print assumption
+#print nonempty
+
+
+#print eq_of_heq
+
+variables (real : Type) [ordered_ring real]
+variables (log exp : real → real)
+variable  log_exp_eq : ∀ x, log (exp x) = x
+variable  exp_log_eq : ∀ {x}, x > 0 → exp (log x) = x
+variable  exp_pos    : ∀ x, exp x > 0
+variable  exp_add    : ∀ x y, exp (x + y) = exp x * exp y
+
+-- this ensures the assumptions are available in tactic proofs
+include log_exp_eq exp_log_eq exp_pos exp_add
+
+example (x y z : real) :
+  exp (x + y + z) = exp x * exp y * exp z :=
+by rw [exp_add, exp_add]
+
+example (y : real) (h : y > 0)  : exp (log y) = y :=
+exp_log_eq h
+
+theorem log_mul {x y : real} (hx : x > 0) (hy : y > 0) :
+  log (x * y) = log x + log y :=
+calc
+    log (x * y) = log (exp (log x) * exp(log y))   : by rw [← exp_log_eq hx, ← exp_log_eq hy]
+    ...         = log (exp (log x + log y))        : by rw [← exp_add (log x) (log y)]
+    ...         = log x + log y                    : by rw [log_exp_eq (log x + log y)]
+example : ∀ {α : Sort u} {a a' : α}, a == a' → a = a' :=
+λ α a a' h, @heq.rec_on α a (λ β b, begin end) h begin
+
+
+end
+
+example (a b : Prop) (h : a ∧ b) : b ∧ a :=
+by do split,
+eh ← get_local `h,
+mk_const ``and.right >>= apply,
+exact eh,
+mk_const ``and.left >>= apply,
+exact eh
+
+namespace foo
+theorem bar : true := trivial
+meta def my_tac : tactic unit :=
+mk_const ``bar >>= exact
+
+example : true := by my_tac
+
+end foo
+
+#print apply_instance
+lemma h : a → b → a ∧ b :=
+by do eh1 ← intro `h1,
+eh2 ← intro `h2,
+applyc ``and.intro,
+exact eh1,
+exact eh2
+
+#print h
+
+universes u v
+open io
+
+
+
+#eval put_str "hello " >> put_str "world! " >> put_str (to_string (27 * 39))
+
+#eval (some 2) <|> (some 1)
+
+#print axioms put_str
+#check @put_str
+#check @get_line
+
+namespace la
+structure registers : Type := (x : ℕ) (y : ℕ) (z : ℕ)
+def init_reg : registers := registers.mk 0 0 0
+
+def state (S : Type u) (α : Type v) : Type (max u v) := S → α × S
+
+instance (S : Type u) : monad (state S) :=
+{ pure := λ α a r, (a, r),
+  bind := λ α β sa b s, b (sa s).1 (sa s).2 }
+
+def read {S : Type} : state S S :=
+λ s, (s, s)
+
+def write {S : Type} : S → state S unit :=
+λ s0 s, ((), s0)
+
+@[reducible] def reg_state := state registers
+
+def read_x : reg_state ℕ :=
+do s ← read, return (registers.x s)
+
+def read_y : reg_state ℕ :=
+do s ← read, return (registers.y s)
+
+def read_z : reg_state ℕ :=
+do s ← read, return (registers.z s)
+
+def write_x (n : ℕ) : reg_state unit :=
+do s ← read,
+write (registers.mk n (registers.y s) (registers.z s))
+
+def write_y (n : ℕ) : reg_state unit :=
+do s ← read,
+write(registers.mk (registers.x s) n (registers.z s))
+
+def write_z (n : ℕ) : reg_state unit :=
+do s ← read,
+write (registers.mk (registers.x s) (registers.y s) n)
+
+def foo : reg_state ℕ :=
+do  write_x 5,
+    write_y 7,
+    x ← read_x,
+    write_z (x + 3),
+    y ← read_y,
+    z ← read_z,
+    write_y (y + z),
+    y ← read_y,
+    return (y ^ 3)
+
+#print foo
+
+end la
+#exit
+
+universe u
+variables {α β γ δ : Type.{u}} (la : list α)
+variables (f : α → list β) (g : α → β → list γ)
+(h : α → β → γ → list δ)
+
+inductive option2 (α : Type u) : Type u
+| none : option2
+| some : α → option2
+
+instance : monad option2 :=
+begin
+  refine {..},
+  refine λ α β, _,
+
+end
+
+#print applicative
+#print option.monad
+example : list δ :=
+do a ← la,
+b ← f a,
+c ← g a b,
+
+
+#exit
+import data.multiset data.finset order.bounded_lattice
+
+@[derive decidable_eq] structure sle :=
+(three_chains : ℕ) -- number of three-chains
+(four_loops : ℕ)
+(six_loops : ℕ)
+(long_chains : multiset ℕ)
+(long_chains_are_long : ∀ x ∈ long_chains, x ≥ 4)
+(long_loops : multiset ℕ)
+(long_loops_are_long : ∀ x ∈ long_loops, x ≥ 8)
+(long_loops_are_even : ∀ x ∈ long_loops, 2 ∣ x)
+
+def size (e : sle) : ℕ := sorry
+
+def legal_moves (e : sle) : finset {f : sle // size f < size e} := sorry
+
+def val : sle → with_top ℕ
+| e := (legal_moves e).inf
+  (λ f, have size f.1 < size e := f.2, (val f.1 : with_top ℕ))
+using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf size⟩]}
+
+def val2 : Π e : sle, legal_moves e ≠ ∅ → ℕ
+| e := (legal_moves e).inf
+  (λ f, have size f.1 < size e := f.2, (val f.1 : with_top ℕ))
+
+#exit
+
+variables {α β γ δ : Type.{u}} (oa : option α)
+variables (f : α → option β) (g : α → β → option γ)
+(h : α → β → γ → option δ)
+
+definition test (m : Type → Type) [monad m]
+  (α : Type) (s : m α) (β : Type) (t : m β) (γ : Type) (f : α → β → m γ)
+  (g : α → β → m γ)
+  :=
+do a ← s,
+b ← t,
+return (g a b)
+
+def x : option β :=
+do a ← oa,
+   b ← f a,
+   return b
+
+#print x
+
+example : option δ :=
+do a ← oa,
+b ← f a,
+c ← g a b,
+h a b c
+
+#print option.return
+
+
+@[elab_as_eliminator, elab_strategy] def multiset.strong_induction_on2 {α : Type*} {p : multiset α → Sort*} :
+  ∀ (s : multiset α), (∀ s, (∀t < s, p t) → p s) → p s :=
+well_founded.fix (measure_wf multiset.card) (λ s ih h, h s (λ t ht, ih t (multiset.card_lt_of_lt ht) h))
+
+#print multiset.strong_induction_on2
+definition f (s : multiset ℕ) : ℕ :=
+  multiset.strong_induction_on2 s (λ s' H, 0)
+
+#eval f ({1,2,3} : multiset ℕ)
+
+def bar : ℕ → ℕ
+| 0     := 0
+| (n+1) := list.length 
+  (list.pmap (λ m (hm : m < n + 1), bar m) [n, n, n] 
+  (by simp [nat.lt_succ_self]))
+
+set_option pp.proofs true
+#print bar._main._pack
+
+def map_rec_on {C : ℕ → Sort*} (f : ℕ → list ℕ) : 
+  Π (n : ℕ) (h : ∀ m, ∀ k ∈ f m, k < m)
+  (c0 : C 0) (ih : (Π n, list ℕ → C (n + 1))), C n
+| 0 := λ h c0 ih, c0 
+| (n+1) := λ h c0 ih, begin have := ih n, 
+   have := this ((f (n + 1)).map (λ m, map_rec_on,
+
+ end
+
+#eval bar 1
+
+def bar_aux : ℕ → (ℕ → list ℕ) → list ℕ
+| 0 _   := []
+| (n+1) f := list.repeat 3 $
+  list.length (bar_aux n f)
+
+#eval bar_aux 2 (λ n, [n, n, n])
+
+instance subtype.has_decidable_eq (α : Prop) [h : decidable_eq α] 
+  (p : α → Prop) : decidable_eq (subtype p)
+| ⟨_, _⟩ ⟨_, _⟩ := is_true rfl
+#print decidable
 
 lemma h (p : Prop) : ¬(p ↔ ¬p) := 
 λ h : p ↔ ¬p, 

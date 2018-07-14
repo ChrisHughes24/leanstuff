@@ -2,10 +2,6 @@ import tactic.find data.nat.prime algebra.group_power tactic.ring data.set.finit
 universes u v
 variables {α : Type u} {β : Type v}
 
-lemma hpropext {p q : Prop} (a : p) (b : q) : a == b := 
-have h : p = q := propext ⟨λ _, b, λ _, a⟩,
-by subst h
-
 open nat finset equiv int.modeq nat int
 local attribute [instance, priority 0] classical.prop_decidable
 
@@ -24,9 +20,6 @@ lemma nat.sub_le_self (a b : ℕ) : a - b ≤ a := nat.sub_le_sub_left _ (zero_l
 lemma nat.div_mul_le (a) {b} (hb : 0 < b) : a / b * b ≤ a := 
 have h : 0 + a / b * b ≤ a % b + a / b * b := add_le_add (zero_le _) (le_refl _),
 by rwa [zero_add, mul_comm, nat.mod_add_div, mul_comm] at h
-
-@[simp] lemma nat.mod_mod (n m : ℕ) : n % m % m = n % m := 
-nat.cases_on m (by simp) (λ m, mod_eq_of_lt (mod_lt _ (succ_pos _)))
 
 lemma int.coe_nat_nonneg (n : ℕ) : (0 : ℤ) ≤ n := int.coe_nat_le.2 (zero_le _)
 
