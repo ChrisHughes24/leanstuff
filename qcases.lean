@@ -15,7 +15,11 @@ intro n,
 
 end tactic.interactive
 
+example  (x : multiset ℕ) (h : x ≠ 0) : x = sorry :=
+begin
+  qcases x using x,
 
+end
 
 
 #print expr
