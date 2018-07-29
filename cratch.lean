@@ -1,4 +1,155 @@
 import logic.function
+
+example (x y : ℕ) (h : x ≠ y) (f : ℕ → ℕ) (h₂ : function.injective f) :
+  f x ≠ f y := mt (@h₂ x y) h
+
+lemma em_of_iff_assoc : (∀ p q r : Prop, ((p ↔ q) ↔ r) ↔ (p ↔ (q ↔ r))) → ∀ p, p ∨ ¬p :=
+λ h p, ((h (p ∨ ¬p) false false).1 
+⟨λ h, h.1 (or.inr (λ hp, h.1 (or.inl hp))), λ h, h.elim⟩).2 iff.rfl
+
+#print axioms em_of_iff_assoc
+
+#exit
+import data.fintype algebra.big_operators linear_algebra.linear_map_module
+#print finset.smul
+
+instance {α : Type*} [monoid α] [fintype α] : fintype (units α) :=
+fintype.of_equiv {a : α // ∃ }
+
+#exit
+import data.nat.prime
+import data.nat.modeq
+import data.int.modeq
+import algebra.group_power
+
+namespace nat
+
+definition quadratic_res (a n: ℕ) := ∃ x: ℕ, a ≡ x^2 [MOD n]
+
+local attribute [instance] classical.prop_decidable
+
+noncomputable definition legendre_sym (a: ℕ) (p:ℕ) : ℤ := 
+if quadratic_res a p ∧ ¬ p ∣ a then 1 else 
+if ¬ quadratic_res a p then -1 
+else 0
+
+theorem law_of_quadratic_reciprocity (p q : ℕ)(H1: prime p ∧ ¬ p=2)(H2: prime q ∧ ¬ q=2) : 
+(legendre_sym p q)*(legendre_sym q p) =(-1)^(((p-1)/2)*((q-1)/2)) := sorry
+
+theorem euler_criterion (p : ℕ) (a: ℕ) (hp : prime p ∧ ¬ p=2) (ha : ¬ p ∣ a) :
+  a^((p - 1) / 2) ≡ legendre_sym a p [MOD p] := sorry
+
+#exit
+
+def phi (n : nat) := ((finset.range n).filter (nat.coprime n)).card
+
+local notation φ: = phi
+
+lemma phi_n (n : ℕ) : phi n = fintype.card (units (Zmod n)) := sorry
+
+
+lemma phi_p (p : ℕ) (hp: nat.prime p) : phi p = p-1 :=
+
+calc phi p = p-1
+
+
+#exit
+import data.nat.modeq data.nat.prime data.finset data.complex.basic
+
+#print mul_le_mul_left
+
+definition quadratic_res (a n : ℕ) : Prop := ∃ x : ℕ, a ≡ x^2 [MOD n]
+
+instance : decidable_rel quadratic_res :=
+λ a n, if hn : n = 0 then decidable_of_iff (∃ x ∈ finset.range a, a = x^2) 
+⟨λ ⟨x, _, hx⟩, ⟨x, by rw hx⟩, λ ⟨x, hx⟩, ⟨x, finset.mem_range.2 begin end, begin end⟩⟩
+else decidable_of_iff (∃ x ∈ finset.range n, a ≡ x^2 [MOD n]) 
+⟨λ ⟨x, _, hx⟩, ⟨x, hx⟩, λ ⟨x, hx⟩, ⟨x % n, finset.mem_range.2 (begin end), sorry⟩ ⟩
+
+
+-- definition legendre_sym (a : ℤ) (p : ℕ) :=
+-- if quadratic_res a p ∧ ¬ p ∣ a then 1 else
+-- if ¬ quadratic_res a p then -1
+-- else 0
+
+#exit
+import algebra.group_power data.finset data.nat.gcd data.nat.prime
+
+def phi (n : nat) := ((finset.range n).filter n.coprime).card
+
+def phi2 (n : nat) := (n.factors.map nat.pred).prod
+
+#eval phi 1000
+#eval phi2 1000
+
+def thing (m n : ℤ) (h : n * n < n * m) : n ^ 2 < n * m := (pow_two n).symm ▸ h
+
+example : 2 + 3 = 5 := add_comm 0 5 ▸ rfl
+
+lemma two_add_three2 : 2 + 3 = 5 := rfl
+#exit
+import data.int.basic
+
+example (a b : ℤ) : (-3 : ℤ).nat_abs / (-5 : ℤ).nat_abs 
+  ≠ ((-3 : ℤ) / (- 5 : ℤ)).nat_abs :=
+dec_trivial
+
+#print tactic.interactive.induction
+
+set_option trace.simplify.rewrite true
+lemma h (α β γ : Type) (f : α → β) (g : β → α) (H : ∀ b : β, f (g b) = b)
+  (j : γ → option β) (x : γ) : 
+  (do y ← (j x), return (f (g y))) = j x := 
+by simp [H]
+
+#print h
+
+#exit
+import analysis.real
+
+theorem infinite_cover {a b : ℝ} {c : set (set ℝ)} (n : ℕ) :
+∃ k : ℕ, 1 ≤ k ≤ n ∧ ∀ c' ⊆ c, {r : ℝ | a+(k-1)*(a+b)/n ≤ r ∧
+r ≤ a+k*(a+b)/n} ⊆ ⋃₀ c' → ¬ set.finite c' := sorry
+
+example : ∃! x, x = 2 := ⟨2, rfl, λ y, id⟩
+#print exists_unique
+#exit
+
+#print array
+
+
+
+def f : ℕ → ℕ → ℕ → ℕ → Prop
+
+notation a `≡` b := f a b
+
+set_option pp.implicit true
+lemma h : ¬ (2 ∣ 5) := dec_trivial
+#print nat.decidable_dvd
+
+example : ¬ (2 | 5) := dec_trivial
+open vector_space
+variables {α β γ : Type} 
+  [field α] [vector_space α β] [vector_space α γ]
+
+inductive T : Type
+| mk : (ℕ → T) → T
+
+#print T
+
+#exit
+import tactic.finish
+
+variables (p q : Prop) (hp : p) (hq : q)
+
+lemma easy : p ↔ p := iff.rfl
+
+theorem not_a_constructivist : (¬(p ∨ q)) ↔ ((¬ p) ∧ (¬ q)) := 
+  by finish
+
+#print not_a_constructivist
+#exit
+import logic.function
 open function
 
 def f : (thunk ℕ) → ℕ  := λ _, 0
@@ -11,6 +162,7 @@ def g : ℕ → ℕ := λ _, 0
 
 #eval g (99 ^ 99 ^ 99 ^ 99 ^ 99)
 
+#check Σ α : Type, set α
 
 structure g :=
 (α : Type)

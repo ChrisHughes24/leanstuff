@@ -1,8 +1,8 @@
-import group_theory.order_of_element .zmod_as_fin2 algebra.pi_instances
-open equiv fintype finset
+import group_theory.order_of_element .zmod_as_fin2 algebra.pi_instances group_theory.group_action
+open equiv fintype finset is_group_action is_monoid_action
 universes u v w
 variables {G : Type u} {α : Type v} {β : Type w} [group G]
-
+#check le_antisymm'
 namespace finset
 
 lemma filter_insert_of_pos [decidable_eq α] (s : finset α) {P : α → Prop} 
@@ -14,18 +14,6 @@ lemma filter_insert_of_neg [decidable_eq α] (s : finset α) {P : α → Prop}
   [decidable_pred P] (a : α) (h : ¬P a) : (insert a s).filter P = s.filter P :=
 ext.2 (λ x, by rw [mem_filter, mem_insert, mem_filter, eq_comm];
   exact ⟨λ h₁, by cases h₁.1; simp * at *, by finish⟩)
-
-lemma prod_const [comm_monoid β] (s : finset α) (b : β) 
-  [decidable_eq α] : s.prod (λ x, b) = b ^ s.card :=
-finset.induction_on s rfl (by simp [pow_add, mul_comm] {contextual := tt})
-
-lemma sum_const [add_comm_monoid β] (s : finset α) (b : β) 
-  [decidable_eq α] : s.sum (λ x, b) = add_monoid.smul s.card b :=
-finset.induction_on s rfl (by simp [add_monoid.add_smul] {contextual := tt})
-
-lemma card_pi {δ : α → Type*} [decidable_eq α]
-  (s : finset α) (t : Π a, finset (δ a)) : (s.pi t).card = s.prod (λ a, card (t a)) :=
-multiset.card_pi _ _
 
 end finset
 
@@ -42,60 +30,6 @@ finset.induction_on s rfl begin
     rw [ne.def, ← nat.zero_mod n] at ha,
     exact nat.modeq.modeq_add (not_not.1 ha) ih }  
 end 
-
-namespace fintype
-
-lemma card_eq_one_iff [fintype α] : card α = 1 ↔ (∃ x : α, ∀ y, y = x) :=
-by rw [← card_unit, card_eq]; exact
-⟨λ ⟨a⟩, ⟨a.symm unit.star, λ y, a.bijective.1 (subsingleton.elim _ _)⟩, 
-λ ⟨x, hx⟩, ⟨⟨λ _, unit.star, λ _, x, λ _, (hx _).trans (hx _).symm, 
-    λ _, subsingleton.elim _ _⟩⟩⟩
-
-lemma card_eq_zero_iff [fintype α] : card α = 0 ↔ (α → false) :=
-⟨λ h a, have e : α ≃ empty := classical.choice (card_eq.1 (by simp [h])), (e a).elim, 
-λ h, have e : α ≃ empty := ⟨λ a, (h a).elim, λ a, a.elim, λ a, (h a).elim, λ a, a.elim⟩, 
-  by simp [card_congr e]⟩
-
-lemma card_pos_iff [fintype α] : 0 < card α ↔ nonempty α :=
-⟨λ h, classical.by_contradiction (λ h₁, 
-  have card α = 0 := card_eq_zero_iff.2 (λ a, h₁ ⟨a⟩),
-  lt_irrefl 0 $ by rwa this at h), 
-λ ⟨a⟩, nat.pos_of_ne_zero (mt card_eq_zero_iff.1 (λ h, h a))⟩
-
-lemma card_le_of_injective [fintype α] [fintype β] (f : α → β) 
-  (hf : function.injective f) : card α ≤ card β :=
-by haveI := classical.prop_decidable; exact
-finset.card_le_card_of_inj_on f (λ _ _, finset.mem_univ _) (λ _ _ _ _ h, hf h)
-
-lemma card_le_one_iff [fintype α] : card α ≤ 1 ↔ (∀ a b : α, a = b) :=
-let n := card α in
-have hn : n = card α := rfl,
-match n, hn with
-| 0 := λ ha, ⟨λ h, λ a, (card_eq_zero_iff.1 ha.symm a).elim, λ _, ha ▸ nat.le_succ _⟩
-| 1 := λ ha, ⟨λ h, λ a b, let ⟨x, hx⟩ := card_eq_one_iff.1 ha.symm in
-  by rw [hx a, hx b],
-    λ _, ha ▸ le_refl _⟩
-| (n+2) := λ ha, ⟨λ h, by rw ← ha at h; exact absurd h dec_trivial, 
-  (λ h, card_unit ▸ card_le_of_injective (λ _, ())
-    (λ _ _ _, h _ _))⟩
-end
-
-open finset
-
-lemma card_pi {β : α → Type*} [fintype α] [decidable_eq α]
-  [f : Π a, fintype (β a)] :
-  card (Π a, β a) = univ.prod (λ a, card (β a)) :=
-by letI f : fintype (Πa∈univ, β a) :=
-  ⟨(univ.pi $ λa, univ), assume f, finset.mem_pi.2 $ assume a ha, mem_univ _⟩;
-exact calc card (Π a, β a) = card (Π a ∈ univ, β a) : card_congr
-  ⟨λ f a ha, f a, λ f a, f a (mem_univ a), λ _, rfl, λ _, rfl⟩ 
-... = univ.prod (λ a, card (β a)) : finset.card_pi _ _
-
-lemma card_fun [fintype α] [decidable_eq α] [fintype β] :
-  card (α → β) = card β ^ card α :=
-by rw [card_pi, prod_const, nat.pow_eq_pow]; refl
-
-end fintype
 
 namespace set
 
@@ -117,7 +51,7 @@ lemma card_image_of_injective (s : set α) [fintype s]
   fintype.card (f '' s) = fintype.card s :=
 card_image_of_inj_on $ λ _ _ _ _ h, H h
 
-lemma coe_to_finset' [decidable_eq α] (s : set α) [fintype s] : (↑s.to_finset : set α) = s :=
+lemma coe_to_finset [decidable_eq α] (s : set α) [fintype s] : (↑s.to_finset : set α) = s :=
 set.ext (by simp)
 
 lemma ssubset_iff_subset_not_subset {s t : set α} : s ⊂ t ↔ s ⊆ t ∧ ¬ t ⊆ s :=
@@ -133,7 +67,7 @@ lemma card_lt_card {s t : set α} [fintype s] [fintype t] (h : s ⊂ t) : card s
 begin
   haveI := classical.prop_decidable,
   rw [card_fintype_of_finset' _ (λ x, mem_to_finset), card_fintype_of_finset' _ (λ x, mem_to_finset)],
-  rw [← coe_to_finset' s, ← coe_to_finset' t, coe_ssubset] at h,
+  rw [← coe_to_finset s, ← coe_to_finset t, coe_ssubset] at h,
   exact finset.card_lt_card h,
 end
 
@@ -256,86 +190,8 @@ have h : ∀ {x : left_cosets H} {a : G}, x ∈ s → a ∈ H →
 
 end should_be_in_group_theory
 
-class is_group_action (f : G → α → α) : Prop :=
-(one : ∀ a : α, f (1 : G) a = a)
-(mul : ∀ (x y : G) (a : α), f (x * y) a = f x (f y a))
-
-namespace group_action
-
-variables (f : G → α → α) [is_group_action f] 
-
-@[simp] lemma one_apply (a : α) : f 1 a = a := is_group_action.one f a
-
-lemma mul_apply (x y : G) (a : α) : f (x * y) a = f x (f y a) := is_group_action.mul _ _ _ _
-
-lemma bijective (g : G) : function.bijective (f g) :=
-function.bijective_iff_has_inverse.2 ⟨f (g⁻¹), 
-  λ a, by rw [← mul_apply f, inv_mul_self, one_apply f],
-  λ a, by rw [← mul_apply f, mul_inv_self, one_apply f]⟩ 
-
-def orbit (a : α) := set.range (λ x : G, f x a)
-
-lemma mem_orbit_iff {f : G → α → α} [is_group_action f] {a b : α} :
-  b ∈ orbit f a ↔ ∃ x : G, f x a = b :=
-by finish [orbit]
-
-@[simp] lemma mem_orbit (a : α) (x : G) :
-  f x a ∈ orbit f a :=
-⟨x, rfl⟩
-
-@[simp] lemma mem_orbit_self (a : α) :
-  a ∈ orbit f a :=
-⟨1, show f 1 a = a, by simp [one_apply f]⟩
-
-lemma orbit_eq {f : G → α → α} [is_group_action f] {a b : α} : a ∈ orbit f b → orbit f a = orbit f b :=
-λ ⟨x, (hx : f x b = a)⟩, set.ext (λ c, ⟨λ ⟨y, (hy : f y a = c)⟩, ⟨y * x,
-  show f (y * x) b = c, by rwa [mul_apply f, hx]⟩,
-λ ⟨y, (hy : f y b = c)⟩, ⟨y * x⁻¹,
-  show f (y * x⁻¹) a = c, by
-    conv {to_rhs, rw [← hy, ← mul_one y, ← inv_mul_self x, ← mul_assoc,
-      mul_apply f, hx]}⟩⟩)
-
-noncomputable instance orbit_fintype (a : α) [fintype G] :
-fintype (orbit f a) := set.fintype_range _
-
-def stabilizer (a : α) : set G :=
-{x : G | f x a = a}
-
-lemma mem_stabilizer_iff {f : G → α → α} [is_group_action f] {a : α} {x : G} :
-  x ∈ stabilizer f a ↔ f x a = a :=
-iff.rfl
-
-instance (a : α) : is_subgroup (stabilizer f a) :=
-{ one_mem := one_apply _ _,
-  mul_mem := λ x y (hx : f x a = a) (hy : f y a = a),
-    show f (x * y) a = a, by rw mul_apply f; simp *,
-  inv_mem := λ x (hx : f x a = a), show f x⁻¹ a = a,
-    by rw [← hx, ← mul_apply f, inv_mul_self, one_apply f, hx] }
-
-noncomputable lemma orbit_equiv_left_cosets (a : α) :
-  orbit f a ≃ left_cosets (stabilizer f a) :=
-by letI := left_rel (stabilizer f a); exact
-equiv.symm (@equiv.of_bijective _ _ 
-  (λ x : left_cosets (stabilizer f a), quotient.lift_on x 
-    (λ x, (⟨f x a, mem_orbit _ _ _⟩ : orbit f a)) 
-    (λ g h (H : _ = _), subtype.eq $ (group_action.bijective f (g⁻¹)).1
-      $ show f g⁻¹ (f g a) = f g⁻¹ (f h a),
-      by rw [← mul_apply f, ← mul_apply f, H, inv_mul_self, one_apply f])) 
-⟨λ g h, quotient.induction_on₂ g h (λ g h H, quotient.sound $
-  have H : f g a = f h a := subtype.mk.inj H, 
-  show f (g⁻¹ * h) a = a,
-  by rw [mul_apply f, ← H, ← mul_apply f, inv_mul_self, one_apply f]), 
-  λ ⟨b, ⟨g, hgb⟩⟩, ⟨⟦g⟧, subtype.eq hgb⟩⟩)
-
-def fixed_points : set α := {a : α | ∀ x, x ∈ stabilizer f a}
-
-lemma mem_fixed_points {f : G → α → α} [is_group_action f] {a : α} :
-  a ∈ fixed_points f ↔ ∀ x : G, f x a = a := iff.rfl
-
-lemma mem_fixed_points' {f : G → α → α} [is_group_action f] {a : α} : a ∈ fixed_points f ↔
-  (∀ b, b ∈ orbit f a → b = a) :=
-⟨λ h b h₁, let ⟨x, hx⟩ := mem_orbit_iff.1 h₁ in hx ▸ h x,
-λ h b, mem_stabilizer_iff.2 (h _ (mem_orbit _ _ _))⟩
+section group_action
+variables (f : G → α → α) [is_group_action f]
 
 lemma card_orbit_of_mem_fixed_points {f : G → α → α} [is_group_action f]  {a : α} [fintype (orbit f a)] : 
   a ∈ fixed_points f ↔ card (orbit f a) = 1 := 
@@ -363,7 +219,7 @@ have hcard : ∀ s : set α, card ↥{x : α | orbit f x = s} % p ≠ 0
     cases h with y hy,
     have hseq : {x | orbit f x = s} = orbit f y := set.ext (λ z, 
       ⟨λ h : orbit f z = s, hy.symm ▸ h ▸ mem_orbit_self _ _, 
-      λ h, show orbit f z = s, by rwa orbit_eq h⟩),
+      λ h, show orbit f z = s, by rwa orbit_eq_iff.2 h⟩),
     rw [card_eq_card_cosets_mul_card_subgroup (stabilizer f y), 
       ← card_congr (orbit_equiv_left_cosets f y)] at h,
     have : ∃ k ≤ n, card (orbit f y) = p ^ k := (nat.dvd_prime_pow hp).1
@@ -403,7 +259,7 @@ have h : (finset.univ.filter (λ a, card {x | orbit f x = a} % p ≠ 0)).sum
         rw [hcard, fintype.card_eq_one_iff] at hs,
         rcases hs with ⟨⟨x, hx₁⟩, hx₂⟩,
         exact ⟨⟨x, mem_fixed_points'.2 (λ y hy, 
-          subtype.mk.inj (hx₂ ⟨y, by have := orbit_eq hy; simpa [this, hx₁] using hx₁⟩))⟩,
+          subtype.mk.inj (hx₂ ⟨y, by have := orbit_eq_iff.2 hy; simpa [this, hx₁] using hx₁⟩))⟩,
             by simpa using hx₁⟩
       end⟩).symm,
 calc card α % p = finset.sum finset.univ (λ a : set α, card {x // orbit f x = a}) % p : 
@@ -414,7 +270,7 @@ calc card α % p = finset.sum finset.univ (λ a : set α, card {x // orbit f x =
 end group_action
 
 namespace sylow
-open group_action
+open is_group_action
 
 def mk_vector_prod_eq_one (n : ℕ) [pos_nat n] (v : Zmod n → G) : Zmod (n+1) → G := 
 λ m, if h : m.1 < n then v m.1 else ((list.range n).map (λ m : ℕ, v (m : Zmod n))).prod⁻¹
@@ -535,8 +391,8 @@ def rotate_vectors_prod_eq_one (G : Type u) [group G] (n : ℕ) [pos_nat n] (i :
   (v : vectors_prod_eq_one G n) : vectors_prod_eq_one G n := ⟨rotate _ n i v.1, rotate_on_vectors_prod_eq_one v.2 _⟩
 
 instance (n : ℕ) [pos_nat n] : is_group_action (rotate_vectors_prod_eq_one G n) :=
-{ one := λ ⟨a, ha⟩, subtype.eq (is_group_action.one (rotate G n) _),
-  mul := λ x y ⟨a, ha⟩, subtype.eq (is_group_action.mul (rotate G n) _ _ _) }
+{ one := λ ⟨a, ha⟩, subtype.eq (is_monoid_action.one (rotate G n) _),
+  mul := λ x y ⟨a, ha⟩, subtype.eq (is_monoid_action.mul (rotate G n) _ _ _) }
 
 lemma mem_fixed_points_rotate_vectors_prod_eq_one {n : ℕ} [pos_nat n]
   : ∀ {v : vectors_prod_eq_one G n}, v ∈ fixed_points (rotate_vectors_prod_eq_one G n) ↔ (v : Zmod n → G) ∈ fixed_points (rotate G n) :=
@@ -746,8 +602,8 @@ set.ext (λ n, ⟨λ h : _ ∈ H, by have := normal_subgroup.normal _ h x; simpa
 
 instance is_group_action.subgroup (H : set G) [is_subgroup H] (f : G → α → α) [is_group_action f] :
   is_group_action (λ x : H, f x) :=
-{ one := λ a, is_group_action.one f a,
-  mul := λ ⟨x, hx⟩ ⟨y, hy⟩ a, is_group_action.mul f x y a }
+{ one := λ a, is_monoid_action.one f a,
+  mul := λ ⟨x, hx⟩ ⟨y, hy⟩ a, is_monoid_action.mul f x y a }
 
 instance is_group_hom_conj (x : G) : is_group_hom (λ (n : G), x * n * x⁻¹) :=
 ⟨by simp [mul_assoc]⟩
@@ -918,7 +774,7 @@ have h : orbit (conj_on_sylow hp) ⟨H, hH⟩ = set.univ :=
   set.eq_univ_iff_forall.2 (λ S, mem_orbit_iff.2 $
   let ⟨x, (hx : S.val = _)⟩ := @sylow_conjugate _ _ _ _ hp S.1 H S.2 hH in
   ⟨x, subtype.eq (hx.symm ▸ rfl)⟩),
-have is_subgroup (stabilizer (conj_on_sylow hp) ⟨H, hH⟩) := group_action.is_subgroup _ _,
+have is_subgroup (stabilizer (conj_on_sylow hp) ⟨H, hH⟩) := by apply_instance,
 by exactI
 have orbit_equiv : card (orbit (conj_on_sylow hp) ⟨H, hH⟩) =
   fintype.card (left_cosets (stabilizer (conj_on_sylow hp) ⟨H, hH⟩)) :=
