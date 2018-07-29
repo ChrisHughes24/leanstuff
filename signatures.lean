@@ -36,7 +36,7 @@ def attach_fin (s : finset ℕ) {n : ℕ} (h : ∀ m ∈ s, m < n) :
 ⟨λ h, let ⟨b, hb₁, hb₂⟩ := multiset.mem_pmap.1 h in hb₂ ▸ hb₁, 
 λ h, multiset.mem_pmap.2 ⟨a.1, h, fin.eta _ _⟩⟩
 
-@[simp] lemma eq_empty_iff_forall_not_mem {s : finset α} : s = ∅ ↔ ∀ x, x ∉ s :=
+lemma eq_empty_iff_forall_not_mem {s : finset α} : s = ∅ ↔ ∀ x, x ∉ s :=
 ⟨λ h, by simp [h], λ h, eq_empty_of_forall_not_mem h⟩
 
 end finset
@@ -347,42 +347,46 @@ def support [fintype α] [decidable_eq α] (f : perm α) := (@univ α _).filter 
 @[simp] lemma mem_support_iff [fintype α] [decidable_eq α] {f : perm α} {a : α} :
   a ∈ f.support ↔ f a ≠ a := by simp [support]
 
-lemma support_eq_empty [fintype α] [decidable_eq α] {f : perm α} :
+@[simp] lemma support_eq_empty [fintype α] [decidable_eq α] {f : perm α} :
   f.support = ∅ ↔ f = 1 :=
-⟨λ h, equiv.ext _ _ (by simpa using h), λ h, by simp [h]⟩
+⟨λ h, equiv.ext _ _ (by simpa [finset.eq_empty_iff_forall_not_mem] using h), 
+  λ h, by simp [h, finset.eq_empty_iff_forall_not_mem]⟩
 
-def transpositions_list [fintype α] [decidable_eq α] 
+lemma support_transpose_mul [decidable_eq α] [fintype α] {f : perm α} {x : α}
+  (hx : x ∈ f.support) : (transpose x (f x) * f).support ⊆ f.support.erase x :=
+λ y hy, begin
+  rw mem_support_iff at hx,
+  simp only [mem_support_iff, transpose_apply, mem_erase, mul_apply, 
+    injective.eq_iff f.bijective.1] at *,
+  by_cases h : f y = x,
+  { exact ⟨λ h₂, by simp * at *, λ h₂, by simp * at *⟩ },
+  { split_ifs at hy; cc }
+end
+
+/-- list of tranpositions whose product is `f` -/
+def transposition_factors [fintype α] [decidable_eq α] 
   [decidable_linear_order α] : Π f : perm α,
   {l : list (perm α) // l.prod = f ∧ ∀ g ∈ l, is_transposition g}
 | f := if h : f = 1 then ⟨[], eq.symm $ support_eq_empty.1 (by simp [h]), by simp⟩
   else
-  let m := @option.get _ f.support.min (option.is_some_iff_exists.2 
+  let x := @option.get _ f.support.min (option.is_some_iff_exists.2 
     (let ⟨a, ha⟩ := exists_mem_of_ne_empty (mt support_eq_empty.1 h) in min_of_mem ha)) in
-  have hm : f m ≠ m := mem_support_iff.1 (mem_of_min (option.get_mem _)),
-  have wf : ((transpose m (f m))⁻¹ * f).support.card < f.support.card := 
-    card_lt_card ⟨λ x hx, mem_support_iff.2 begin
-      rw [mem_support_iff] at hx,
-      clear transpositions_list,
-      dsimp [transpose_apply, mul_apply] at *,
-      split_ifs at hx with h h h,
-      { assume hfxx,
-        rw h at hfxx,
-        rw hfxx at hm h,
-        contradiction },
-      { exact (hx ((injective.eq_iff f.bijective.1).1 h).symm).elim },
-      { cc }
-    end, 
-    not_forall.2 ⟨m, by clear transpositions_list; simpa [mem_support_iff]⟩⟩,
-  let l := transpositions_list ((transpose m (f m))⁻¹ * f) in
-  ⟨transpose m (f m) :: l.1,
+  have hx : x ∈ f.support := mem_of_min (option.get_mem _),
+  have wf : ((transpose x (f x))⁻¹ * f).support.card < f.support.card := 
+    calc ((transpose x (f x))⁻¹ * f).support.card ≤ (f.support.erase x).card : 
+      card_le_of_subset (by rw [transpose_inv]; exact support_transpose_mul hx)
+    ... < f.support.card : by rw card_erase_of_mem hx;
+      exact nat.pred_lt (mt card_eq_zero.1 (ne_empty_of_mem hx)),
+  let l := transposition_factors ((transpose x (f x))⁻¹ * f) in
+  ⟨transpose x (f x) :: l.1,
   by rw [list.prod_cons, l.2.1, ← mul_assoc, mul_inv_self, one_mul],
-  λ g hg, ((list.mem_cons_iff _ _ _).1 hg).elim (λ hgt, ⟨m, f m, hgt⟩) 
+  λ g hg, ((list.mem_cons_iff _ _ _).1 hg).elim (λ hgt, ⟨x, f x, hgt⟩) 
     (l.2.2 _)⟩
 using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ f, f.support.card)⟩]}
 
 def trunc_transpositions_list [fintype α] [decidable_eq α] (f : perm α) :
   trunc {l : list (perm α) // l.prod = f ∧ ∀ g ∈ l, is_transposition g} :=
 trunc.rec_on_subsingleton (trunc_decidable_linear_order_fintype α)
-(λ I, by exactI trunc.mk (transpositions_list f))
+(λ I, by exactI trunc.mk (transposition_factors f))
 
 end equiv.perm
