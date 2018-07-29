@@ -44,18 +44,20 @@ def attach_fin (s : finset ℕ) {n : ℕ} (h : ∀ m ∈ s, m < n) :
 end finset
 
 @[derive decidable_eq] inductive mu2
-| one : mu2
+|     one : mu2
 | neg_one : mu2
 
 namespace mu2
 
-definition neg : mu2 → mu2
-| one := neg_one 
-| neg_one := one
+def neg : mu2 → mu2
+|     one := neg_one
+| neg_one :=     one
 
 instance : has_one mu2 := ⟨one⟩
 instance : has_neg mu2 := ⟨neg⟩
 instance : fintype mu2 := ⟨{one, neg_one}, λ a, by cases a; simp⟩
+
+@[simp] lemma card_mu2 : fintype.card mu2 = 2 := rfl
 
 def mul : mu2 → mu2 → mu2
 |   1    1  :=  1
@@ -75,20 +77,20 @@ namespace equiv.perm
 @[simp] lemma one_apply (a : α) : 
   (1 : perm α) a = a := rfl
 
-@[simp] lemma mul_apply (x y : perm α) (a : α) : 
-  (x * y) a = x (y a) := rfl
+@[simp] lemma mul_apply (f g : perm α) (a : α) : 
+  (f * g) a = f (g a) := rfl
 
-@[simp] lemma inv_apply_self (x : perm α) (a : α) : 
-  x⁻¹ (x a) = a := equiv.inverse_apply_apply _ _
+@[simp] lemma inv_apply_self (f : perm α) (a : α) : 
+  f⁻¹ (f a) = a := equiv.inverse_apply_apply _ _
 
-@[simp] lemma apply_inv_self (x : perm α) (a : α) : 
-  x (x⁻¹ a) = a := equiv.apply_inverse_apply _ _
+@[simp] lemma apply_inv_self (f : perm α) (a : α) : 
+  f (f⁻¹ a) = a := equiv.apply_inverse_apply _ _
 
 lemma one_def : (1 : perm α) = equiv.refl α := rfl
 
-lemma mul_def (x y : perm α) : x * y = y.trans x := rfl
+lemma mul_def (f g : perm α) : f * g = g.trans f := rfl
 
-lemma inv_def (x : perm α) : x⁻¹ = x.symm := rfl
+lemma inv_def (f : perm α) : f⁻¹ = f.symm := rfl
 
 def transpose [decidable_eq α] (x y : α) : perm α :=
 { to_fun := λ a, if a = x then y else if a = y then x else a,
@@ -122,23 +124,23 @@ equiv.ext _ _ $ λ a, by dsimp [transpose]; split_ifs; cc
 lemma transpose_apply [decidable_eq α] (x y a : α) :
   transpose x y a = if a = x then y else if a = y then x else a := rfl
 
-lemma ite_apply {p : Prop} [decidable p] (a b : perm α) (n : α) : 
-  (if p then a else b).1 n = if p then a.1 n else b.1 n :=
+lemma ite_apply {p : Prop} [decidable p] (f g : perm α) (x : α) : 
+  (if p then f else g).1 x = if p then f.1 x else g.1 x :=
 if h : p then by rw [if_pos h, if_pos h]; refl else by rw [if_neg h, if_neg h]; refl
 
-lemma ite_inv_apply {p : Prop} [decidable p] (a b : perm α) (n : α) : 
-  (if p then a else b).2 n = if p then a.2 n else b.2 n :=
+lemma ite_inv_apply {p : Prop} [decidable p] (f g : perm α) (x : α) : 
+  (if p then f else g).2 x = if p then f.2 x else g.2 x :=
 if h : p then by rw [if_pos h, if_pos h]; refl else by rw [if_neg h, if_neg h]; refl
 
 lemma transpose_conj [decidable_eq α] {a b x y : α} 
   (hab : a ≠ b) (hxy : x ≠ y) :
-  ∃ f : perm α, f * transpose x y * f⁻¹ = transpose a b :=
+  {f : perm α // f * transpose x y * f⁻¹ = transpose a b} :=
 ⟨if x = b then transpose y a 
 else if y = a then transpose x b
 else transpose x a * transpose y b, equiv.ext _ _ $ λ n,
-begin 
+begin
   unfold_coes,
-  dsimp [transpose, inv_def, mul_def, equiv.symm, equiv.trans, function.comp],
+  dsimp [transpose, inv_def, mul_def, equiv.symm, equiv.trans, function.comp, equiv.to_fun],
   simp only [ite_apply, ite_inv_apply],
   split_ifs; cc
 end⟩
@@ -168,51 +170,51 @@ end
 @[simp] lemma equiv.symm.trans_apply {α β γ : Type*} (f : α ≃ β) (g : β ≃ γ) (a : γ) : 
   (f.trans g).symm a = f.symm (g.symm a) := rfl
 
-def sign_bij_aux {n : ℕ} (x : perm (fin n)) (a : Σ a : fin n, fin n) :
+def sign_bij_aux {n : ℕ} (f : perm (fin n)) (a : Σ a : fin n, fin n) :
   Σ a : fin n, fin n :=
-if hxa : x a.2 < x a.1
-then ⟨x a.1, x a.2⟩
-else ⟨x a.2, x a.1⟩
+if hxa : f a.2 < f a.1
+then ⟨f a.1, f a.2⟩
+else ⟨f a.2, f a.1⟩
 
-lemma sign_bij_aux_inj {n : ℕ} {x : perm (fin n)} : ∀ a b : Σ a : fin n, fin n,
-   a ∈ fin_pairs_lt n → b ∈ fin_pairs_lt n → sign_bij_aux x a = sign_bij_aux x b → a = b :=
+lemma sign_bij_aux_inj {n : ℕ} {f : perm (fin n)} : ∀ a b : Σ a : fin n, fin n,
+   a ∈ fin_pairs_lt n → b ∈ fin_pairs_lt n → sign_bij_aux f a = sign_bij_aux f b → a = b :=
 λ ⟨a₁, a₂⟩ ⟨b₁, b₂⟩ ha hb h, begin
   unfold sign_bij_aux at h,
   rw mem_fin_pairs_lt at *,
   have : ¬b₁ < b₂ := not_lt_of_ge (le_of_lt hb),
   split_ifs at h;
-  simp [*, injective.eq_iff x.bijective.1, sigma.mk.inj_eq] at *
+  simp [*, injective.eq_iff f.bijective.1, sigma.mk.inj_eq] at *
 end
 
-lemma sign_bij_aux_surj {n : ℕ} {x : perm (fin n)} : ∀ a ∈ fin_pairs_lt n,
-  ∃ b ∈ fin_pairs_lt n, a = sign_bij_aux x b :=
+lemma sign_bij_aux_surj {n : ℕ} {f : perm (fin n)} : ∀ a ∈ fin_pairs_lt n,
+  ∃ b ∈ fin_pairs_lt n, a = sign_bij_aux f b :=
 λ ⟨a₁, a₂⟩ ha,
-if hxa : x⁻¹ a₂ < x⁻¹ a₁
-then ⟨⟨x⁻¹ a₁, x⁻¹ a₂⟩, mem_fin_pairs_lt.2 hxa,
+if hxa : f⁻¹ a₂ < f⁻¹ a₁
+then ⟨⟨f⁻¹ a₁, f⁻¹ a₂⟩, mem_fin_pairs_lt.2 hxa,
   by dsimp [sign_bij_aux];
     rw [apply_inv_self, apply_inv_self, dif_pos (mem_fin_pairs_lt.1 ha)]⟩
-else ⟨⟨x⁻¹ a₂, x⁻¹ a₁⟩, mem_fin_pairs_lt.2 $ lt_of_le_of_ne
+else ⟨⟨f⁻¹ a₂, f⁻¹ a₁⟩, mem_fin_pairs_lt.2 $ lt_of_le_of_ne
   (le_of_not_gt hxa) $ λ h,
-    by simpa [mem_fin_pairs_lt, (x⁻¹).bijective.1 h, lt_irrefl] using ha,
+    by simpa [mem_fin_pairs_lt, (f⁻¹).bijective.1 h, lt_irrefl] using ha,
   by dsimp [sign_bij_aux];
     rw [apply_inv_self, apply_inv_self, 
       dif_neg (not_lt_of_ge (le_of_lt (mem_fin_pairs_lt.1 ha)))]⟩
 
-lemma sign_bij_aux_mem {n : ℕ} {x : perm (fin n)}: ∀ a : Σ a : fin n, fin n,
-  a ∈ fin_pairs_lt n → sign_bij_aux x a ∈ fin_pairs_lt n :=
+lemma sign_bij_aux_mem {n : ℕ} {f : perm (fin n)}: ∀ a : Σ a : fin n, fin n,
+  a ∈ fin_pairs_lt n → sign_bij_aux f a ∈ fin_pairs_lt n :=
 λ ⟨a₁, a₂⟩ ha, begin
   unfold sign_bij_aux,
   split_ifs with h,
   { exact mem_fin_pairs_lt.2 h },
   { exact mem_fin_pairs_lt.2
     (lt_of_le_of_ne (le_of_not_gt h)
-      (λ h, ne_of_lt (mem_fin_pairs_lt.1 ha) (x.bijective.1 h.symm))) }
+      (λ h, ne_of_lt (mem_fin_pairs_lt.1 ha) (f.bijective.1 h.symm))) }
 end
 
-@[simp] lemma sign_aux_inv {n : ℕ} (x : perm (fin n)) : sign_aux x⁻¹ = sign_aux x :=
-prod_bij (λ a ha, sign_bij_aux x⁻¹ a)
+@[simp] lemma sign_aux_inv {n : ℕ} (f : perm (fin n)) : sign_aux f⁻¹ = sign_aux f :=
+prod_bij (λ a ha, sign_bij_aux f⁻¹ a)
 sign_bij_aux_mem
-(λ ⟨a, b⟩ hab, if h : x⁻¹ b < x⁻¹ a
+(λ ⟨a, b⟩ hab, if h : f⁻¹ b < f⁻¹ a
   then by rw [sign_bij_aux, dif_pos h, if_neg (not_le_of_gt h), apply_inv_self,
     apply_inv_self, if_neg (not_le_of_gt $ mem_fin_pairs_lt.1 hab)]
   else by rw [sign_bij_aux, if_pos (le_of_not_gt h), dif_neg h, apply_inv_self,
@@ -220,23 +222,23 @@ sign_bij_aux_mem
 sign_bij_aux_inj
 sign_bij_aux_surj
 
-lemma sign_aux_mul {n : ℕ} (x y : perm (fin n)) :
-  sign_aux (x * y) = sign_aux x * sign_aux y :=
-sign_aux_inv y ▸ begin
+lemma sign_aux_mul {n : ℕ} (f g : perm (fin n)) :
+  sign_aux (f * g) = sign_aux f * sign_aux g :=
+sign_aux_inv g ▸ begin
   unfold sign_aux,
   rw ← prod_mul_distrib,
-  refine prod_bij (λ a ha, sign_bij_aux y a) sign_bij_aux_mem _ sign_bij_aux_inj sign_bij_aux_surj,
+  refine prod_bij (λ a ha, sign_bij_aux g a) sign_bij_aux_mem _ sign_bij_aux_inj sign_bij_aux_surj,
   rintros ⟨a, b⟩ hab,
   rw [sign_bij_aux, mul_apply, mul_apply],
   rw mem_fin_pairs_lt at hab,
-  by_cases h : y b < y a,
+  by_cases h : g b < g a,
   { rw dif_pos h,
     simp [not_le_of_gt hab]; congr },
   { rw [dif_neg h, inv_apply_self, inv_apply_self, if_pos (le_of_lt hab)],
-    by_cases h₁ : x (y b) ≤ x (y a),
-    { have : x (y b) ≠ x (y a),
-      { rw [ne.def, injective.eq_iff x.bijective.1, 
-          injective.eq_iff y.bijective.1];
+    by_cases h₁ : f (g b) ≤ f (g a),
+    { have : f (g b) ≠ f (g a),
+      { rw [ne.def, injective.eq_iff f.bijective.1, 
+          injective.eq_iff g.bijective.1];
         exact ne_of_lt hab },
       rw [if_pos h₁, if_neg (not_le_of_gt 
         (lt_of_le_of_ne h₁ this))],
