@@ -63,8 +63,6 @@ def mul : mu2 → mu2 → mu2
 |   1  (-1) := -1
 | (-1)   1  := -1
 
-instance : has_mul mu2 := ⟨mul⟩
-
 instance : comm_group mu2 :=
 by refine_struct { mul := mul, inv := id, one := 1 }; exact dec_trivial
 
