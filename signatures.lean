@@ -1,4 +1,4 @@
-import data.equiv.basic .Zmod_as_fin2 order.bounded_lattice
+import data.fintype
 
 open equiv function finset 
 variables {α : Type*} {β : Type*}
@@ -24,8 +24,6 @@ trunc.rec_on_subsingleton (fintype.equiv_fin α)
     le_total := λ a b, le_total (f a) _,
     lt_iff_le_not_le := λ a b, @lt_iff_le_not_le _ _ (f a) _,
     decidable_le := λ a b, fin.decidable_le _ _ })
-
-instance {n : ℕ} : has_repr (Zmod n) := fin.has_repr n
 
 namespace finset
 
