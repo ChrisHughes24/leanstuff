@@ -1,4 +1,4 @@
-import data.fintype
+import data.fintype group_theory.subgroup
 
 open equiv function finset 
 variables {α : Type*} {β : Type*}
@@ -66,6 +66,9 @@ def mul : mu2 → mu2 → mu2
 instance : comm_group mu2 :=
 by refine_struct { mul := mul, inv := id, one := 1 }; exact dec_trivial
 
+@[simp] lemma ne_neg_one_iff : ∀ a : mu2, a ≠ -1 ↔ a = 1 := dec_trivial
+@[simp] lemma ne_one_iff : ∀ a : mu2, a ≠ 1 ↔ a = -1 := dec_trivial
+
 end mu2
 
 namespace equiv.perm
@@ -88,57 +91,21 @@ lemma mul_def (f g : perm α) : f * g = g.trans f := rfl
 
 lemma inv_def (f : perm α) : f⁻¹ = f.symm := rfl
 
-def transpose [decidable_eq α] (x y : α) : perm α :=
-{ to_fun := λ a, if a = x then y else if a = y then x else a,
-  inv_fun := λ a, if a = x then y else if a = y then x else a,
-  left_inv := λ a, by dsimp; split_ifs; cc,
-  right_inv := λ a, by dsimp; split_ifs; cc }
+@[simp] lemma swap_inv [decidable_eq α] (x y : α) : 
+  (equiv.swap x y)⁻¹ = equiv.swap x y := rfl
 
-@[simp] lemma transpose_left [decidable_eq α] (x y : α) :
-   transpose x y x = y :=
-by rw transpose; simp [if_pos rfl]
-
-@[simp] lemma transpose_right [decidable_eq α] (x y : α) :
-   transpose x y y = x :=
-by rw transpose; dsimp; split_ifs; simp *
-
-@[simp] lemma transpose_self [decidable_eq α] (x : α) :
-  transpose x x = 1 := 
-equiv.ext _ _ $ λ a, by dsimp [transpose]; split_ifs; cc
-
-lemma transpose_eq_of_ne [decidable_eq α] {x y a : α} (hx : a ≠ x)
-  (hy : a ≠ y) : transpose x y a = a :=
-by rw transpose; simp [if_neg hx, if_neg hy]
-
-lemma transpose_comm [decidable_eq α] (x y : α) :
-  transpose x y = transpose y x :=
-equiv.ext _ _ $ λ a, by dsimp [transpose]; split_ifs; cc
-
-@[simp] lemma transpose_inv [decidable_eq α] (x y : α) :
-  (transpose x y)⁻¹ = transpose x y := rfl
-
-lemma transpose_apply [decidable_eq α] (x y a : α) :
-  transpose x y a = if a = x then y else if a = y then x else a := rfl
-
-lemma ite_apply {p : Prop} [decidable p] (f g : perm α) (x : α) : 
-  (if p then f else g).1 x = if p then f.1 x else g.1 x :=
-if h : p then by rw [if_pos h, if_pos h]; refl else by rw [if_neg h, if_neg h]; refl
-
-lemma ite_inv_apply {p : Prop} [decidable p] (f g : perm α) (x : α) : 
-  (if p then f else g).2 x = if p then f.2 x else g.2 x :=
-if h : p then by rw [if_pos h, if_pos h]; refl else by rw [if_neg h, if_neg h]; refl
-
-lemma transpose_conj [decidable_eq α] {a b x y : α} 
+lemma swap_conj [decidable_eq α] {a b x y : α} 
   (hab : a ≠ b) (hxy : x ≠ y) :
-  {f : perm α // f * transpose x y * f⁻¹ = transpose a b} :=
-⟨if x = b then transpose y a 
-else if y = a then transpose x b
-else transpose x a * transpose y b, equiv.ext _ _ $ λ n,
+  {f : perm α // f * swap x y * f⁻¹ = swap a b} :=
+⟨swap a x * swap y (swap a x b), equiv.ext _ _ $ λ n,
 begin
-  unfold_coes,
-  dsimp [transpose, inv_def, mul_def, equiv.symm, equiv.trans, function.comp, equiv.to_fun],
-  simp only [ite_apply, ite_inv_apply],
-  split_ifs; cc
+  by_cases hxb : x = b,
+  { rw [hxb, swap_apply_right, mul_inv_rev],
+    dsimp [mul_apply, swap_apply_def],
+    split_ifs; cc },
+  { rw [swap_apply_of_ne_of_ne (ne.symm hab) (ne.symm hxb), mul_inv_rev],
+    dsimp [mul_apply, swap_apply_def],
+    split_ifs; cc }
 end⟩
 
 /-- set of all pairs ⟨a, b⟩ : Σ a : fin n, fin n such that b < a -/
@@ -259,13 +226,13 @@ end
   (if hp : p then a else b hp) ≠ a ↔ ∃ hp : ¬p, b hp ≠ a :=
 (decidable.em p).elim (λ hp, by simp [hp]) (λ hp, by simp [hp])
 
-private lemma sign_aux_transpose_zero_one {n : ℕ} (hn : 2 ≤ n) :
-  sign_aux (transpose (⟨0, lt_of_lt_of_le dec_trivial hn⟩ : fin n) 
+private lemma sign_aux_swap_zero_one {n : ℕ} (hn : 2 ≤ n) :
+  sign_aux (swap (⟨0, lt_of_lt_of_le dec_trivial hn⟩ : fin n) 
   ⟨1, lt_of_lt_of_le dec_trivial hn⟩) = -1 :=
 let zero : fin n := ⟨0, lt_of_lt_of_le dec_trivial hn⟩ in
 let one : fin n := ⟨1, lt_of_lt_of_le dec_trivial hn⟩ in
 have hzo : zero < one := dec_trivial,
-show sign_aux (transpose zero one) = sign_aux (transpose 
+show sign_aux (swap zero one) = sign_aux (swap 
   (⟨0, dec_trivial⟩ : fin 2) ⟨1, dec_trivial⟩),
 begin
   refine eq.symm (prod_bij_ne_one (λ _ _ _, ⟨one, zero⟩) 
@@ -289,15 +256,15 @@ begin
   simp [*, lt_irrefl, -not_lt] at *
 end
 
-lemma sign_aux_transpose : ∀ {n : ℕ} {x y : fin n} (hxy : x ≠ y),
-  sign_aux (transpose x y) = -1
+lemma sign_aux_swap : ∀ {n : ℕ} {x y : fin n} (hxy : x ≠ y),
+  sign_aux (swap x y) = -1
 | 0 := dec_trivial
 | 1 := dec_trivial
 | (n+2) := λ x y hxy, 
-let ⟨f, hf⟩ := transpose_conj hxy (show (⟨0, dec_trivial⟩ : fin (n + 2)) ≠
+let ⟨f, hf⟩ := swap_conj hxy (show (⟨0, dec_trivial⟩ : fin (n + 2)) ≠
   ⟨1, dec_trivial⟩, from dec_trivial) in
 have h2n : 2 ≤ n + 2 := dec_trivial,
-by rw [← hf, sign_aux_mul, sign_aux_mul, sign_aux_transpose_zero_one h2n,
+by rw [← hf, sign_aux_mul, sign_aux_mul, sign_aux_swap_zero_one h2n,
   mul_right_comm, ← sign_aux_mul, mul_inv_self, sign_aux_one, one_mul]
 
 def sign [fintype α] [decidable_eq α] (x : perm α) : mu2 :=
@@ -309,10 +276,10 @@ trunc.lift
         mul_inv_self, sign_aux_one, one_mul]
   ... = sign_aux (equiv.trans (equiv.trans (equiv.symm g) x) g) : congr_arg sign_aux
     $ equiv.ext _ _ $ λ a,
-      by rw inv_def; simp[equiv.symm.trans_apply])
+      by rw inv_def; simp [equiv.symm.trans_apply])
 (fintype.equiv_fin α)
 
-instance [fintype α] [decidable_eq α] : is_group_hom (@sign α _ _) :=
+instance [decidable_eq α] [fintype α] : is_group_hom (sign : perm α → mu2) :=
 ⟨λ x y, by unfold sign; exact
 trunc.induction_on (fintype.equiv_fin α)
 (λ f, begin
@@ -321,24 +288,24 @@ trunc.induction_on (fintype.equiv_fin α)
   exact congr_arg sign_aux (equiv.ext _ _ (λ x, by simp))
 end)⟩
 
-@[simp] lemma sign_transpose [fintype α] [decidable_eq α] {x y : α} (h : x ≠ y) :
-  sign (transpose x y) = -1 :=
+@[simp] lemma sign_swap [fintype α] [decidable_eq α] {x y : α} (h : x ≠ y) :
+  sign (swap x y) = -1 :=
 begin
   unfold sign,
   refine trunc.induction_on (fintype.equiv_fin α) (λ f, _),
-  have : (f.symm.trans (transpose x y)).trans f = transpose (f x) (f y),
-    from equiv.ext _ _ (λ b, begin 
-      rw [transpose, transpose],
-      simp,
-      have : ∀ z : α, f.symm b = z → b = f z := 
-        λ z hz, by simp [hz.symm],
-      split_ifs; simp * at *
+  have : (f.symm.trans (swap x y)).trans f = swap (f x) (f y),
+    from equiv.ext _ _ (λ b, begin
+      have : ∀ z : α, f.2 b = z → b = f.1 z := 
+        λ z hz, by simp [hz.symm, f.right_inv b],
+      unfold_coes at *,
+      dsimp [equiv.swap, equiv.swap_core, equiv.trans, equiv.symm],
+      split_ifs; simp [*, f.left_inv x, f.right_inv b, f.left_inv y] at *
      end),
   rw [trunc.lift_beta, this,
-    sign_aux_transpose (mt (injective.eq_iff f.bijective.1).1 h)]
+    sign_aux_swap (mt (injective.eq_iff f.bijective.1).1 h)]
 end
 
-def is_transposition [decidable_eq α] (f : perm α) := ∃ x y : α, f = transpose x y
+def is_swap [decidable_eq α] (f : perm α) := ∃ x y : α, x ≠ y ∧ f = swap x y
 
 def is_cycle (f : perm α) := ∃ x : α, ∀ y : α, ∃ n : ℕ, (f ^ n) x = y
 
@@ -353,10 +320,10 @@ def support [fintype α] [decidable_eq α] (f : perm α) := (@univ α _).filter 
   λ h, by simp [h, finset.eq_empty_iff_forall_not_mem]⟩
 
 lemma support_transpose_mul [decidable_eq α] [fintype α] {f : perm α} {x : α}
-  (hx : x ∈ f.support) : (transpose x (f x) * f).support ⊆ f.support.erase x :=
+  (hx : x ∈ f.support) : (swap x (f x) * f).support ⊆ f.support.erase x :=
 λ y hy, begin
   rw mem_support_iff at hx,
-  simp only [mem_support_iff, transpose_apply, mem_erase, mul_apply, 
+  simp only [mem_support_iff, swap_apply_def, mem_erase, mul_apply, 
     injective.eq_iff f.bijective.1] at *,
   by_cases h : f y = x,
   { exact ⟨λ h₂, by simp * at *, λ h₂, by simp * at *⟩ },
@@ -364,29 +331,57 @@ lemma support_transpose_mul [decidable_eq α] [fintype α] {f : perm α} {x : α
 end
 
 /-- list of tranpositions whose product is `f` -/
-def transposition_factors [fintype α] [decidable_eq α] 
+def swap_factors [fintype α] [decidable_eq α] 
   [decidable_linear_order α] : Π f : perm α,
-  {l : list (perm α) // l.prod = f ∧ ∀ g ∈ l, is_transposition g}
+  {l : list (perm α) // l.prod = f ∧ ∀ g ∈ l, is_swap g}
 | f := if h : f = 1 then ⟨[], eq.symm $ support_eq_empty.1 (by simp [h]), by simp⟩
   else
   let x := @option.get _ f.support.min (option.is_some_iff_exists.2 
     (let ⟨a, ha⟩ := exists_mem_of_ne_empty (mt support_eq_empty.1 h) in min_of_mem ha)) in
   have hx : x ∈ f.support := mem_of_min (option.get_mem _),
-  have wf : ((transpose x (f x))⁻¹ * f).support.card < f.support.card := 
-    calc ((transpose x (f x))⁻¹ * f).support.card ≤ (f.support.erase x).card : 
-      card_le_of_subset (by rw [transpose_inv]; exact support_transpose_mul hx)
+  have wf : ((swap x (f x))⁻¹ * f).support.card < f.support.card := 
+    calc ((swap x (f x))⁻¹ * f).support.card ≤ (f.support.erase x).card : 
+      card_le_of_subset (by rw swap_inv; exact support_transpose_mul hx)
     ... < f.support.card : by rw card_erase_of_mem hx;
       exact nat.pred_lt (mt card_eq_zero.1 (ne_empty_of_mem hx)),
-  let l := transposition_factors ((transpose x (f x))⁻¹ * f) in
-  ⟨transpose x (f x) :: l.1,
+  let l := swap_factors ((swap x (f x))⁻¹ * f) in
+  ⟨swap x (f x) :: l.1,
   by rw [list.prod_cons, l.2.1, ← mul_assoc, mul_inv_self, one_mul],
-  λ g hg, ((list.mem_cons_iff _ _ _).1 hg).elim (λ hgt, ⟨x, f x, hgt⟩) 
+  λ g hg, ((list.mem_cons_iff _ _ _).1 hg).elim 
+    (λ hgt, ⟨x, f x, ne.symm $ mem_support_iff.1 hx, hgt⟩) 
     (l.2.2 _)⟩
 using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ f, f.support.card)⟩]}
 
-def trunc_transpositions_list [fintype α] [decidable_eq α] (f : perm α) :
-  trunc {l : list (perm α) // l.prod = f ∧ ∀ g ∈ l, is_transposition g} :=
+def trunc_swap_factors [fintype α] [decidable_eq α] (f : perm α) :
+  trunc {l : list (perm α) // l.prod = f ∧ ∀ g ∈ l, is_swap g} :=
 trunc.rec_on_subsingleton (trunc_decidable_linear_order_fintype α)
-(λ I, by exactI trunc.mk (transposition_factors f))
+(λ I, by exactI trunc.mk (swap_factors f))
+
+lemma eq_sign_of_surjective_hom [fintype α] [decidable_eq α] {s : perm α → mu2}
+  [is_group_hom s] (hs : surjective s) : s = sign :=
+have ∀ x y : α, x ≠ y → s (swap x y) = -1 :=
+  λ x y hxy, classical.by_contradiction $ λ h, 
+    have ∀ a b : α, a ≠ b → s (swap a b) = 1 :=
+    λ a b hab, let ⟨g, hg⟩ := swap_conj hab hxy in 
+      by rwa [← hg, is_group_hom.mul s, mul_comm, ← is_group_hom.mul s, 
+        ← mul_assoc, inv_mul_self, one_mul, ← mu2.ne_neg_one_iff],
+  let ⟨g, hg⟩ := hs (-1) in 
+  let ⟨l, hl⟩ := trunc.out (trunc_swap_factors g) in
+  have s l.prod = 1 := (is_group_hom.mem_ker s).1 $ is_submonoid.list_prod_mem 
+     (λ g hg, let ⟨x,y, hxy⟩ := hl.2 g hg in hxy.2.symm ▸ 
+       (is_group_hom.mem_ker s).2 $ this x y hxy.1),
+  by simp [hl.1.symm, this] at hg;
+    contradiction,
+funext $ λ f,
+let ⟨l, hl₁, hl₂⟩ := trunc.out (trunc_swap_factors f) in
+hl₁ ▸ begin
+  clear hl₁,
+  induction l with g l ih,
+  { simp [is_group_hom.one s, is_group_hom.one (@sign α _ _)] },
+  { rcases hl₂ g (list.mem_cons_self _ _) with ⟨x, y, hxy⟩,
+    rw [list.prod_cons, is_group_hom.mul s, is_group_hom.mul (@sign α _ _),
+      hxy.2, sign_swap hxy.1, this _ _ hxy.1, 
+      ih (λ g hg, hl₂ g (list.mem_cons_of_mem _ hg))] }
+end
 
 end equiv.perm

@@ -1,0 +1,191 @@
+A few people have asked me about how my Lean proof of the blue eyed islanders question on Kevin Buzzard's M1F problem sheet works
+[Question 6, on http://wwwf.imperial.ac.uk/~buzzard/maths/teaching/18Aut/M1F/exsht05.pdf]. I didn't have a readable proof of this until now - I first wrote the proof when I was much less proficient at Lean, so in this blog post I present a more readable version of the proof. This is actually a proof of a slightly simplified version of the problem, since the brown eyed islanders do not have to leave the island in this version. I also strengthen the proof by proving that they do not leave until day 100. This version still demonstrates the most interesting parts of the question.
+
+### Statement ###
+
+The hardest part of this proof to understand is the statement of the problem. I defined the function <code> island_rules <\code> to represent what the blue eyed islanders know. Given a day number <code>d<\code>, and the actual number of blue eyed islanders <code>b<\code>, and a hypothesized number of blue eyed islanders <code>B<\code>, it returns whether or not <code>B<\code> is a possible number of blue eyed islanders from the blue eyed islanders perspective. If the only consistent value for <code>B<\code> is <code>b<\code> then the blue eyed islanders have deduced the number of blue eyed islanders, and thus worked out their own eye colour and must leave the island. Given that the islanders are perfect logicians, they know exactly whether this function returns true or false for any given values (there is a philosophical question here about how perfect the logicians are, and whether they can solve undecidable propositions, for the purposes of this proof they can, although this problem is constructively true).
+
+<code>
+def island_rules : ℕ → ℕ → ℕ → Prop
+| 0     b B := (B = b ∨ B = b - 1) ∧ 0 < B
+| (d+1) b B := island_rules d b B ∧
+  ((∀ C, island_rules d b C → C = b) ↔ ∀ C, island_rules d B C → C = B)
+</code>
+
+On day 0 there are two possibilities for the number of blue eyed islanders <code> b </code> and <code> b - 1 <\code> unless <code> b = 1<\code>, in which case there is only one possibility, since it is also known that the actual number is greater than zero.
+
+On subsequent days, a hypothesized value `B` is possible if and only if it was possible the previous day and it is consistent with whether or not islanders left the previous day. The statement <code> ((∀ C, island_rules d b C → C = b) ↔ ∀ C, island_rules d B C → C = B) <\code> is the hardest part to understand. The left hand side is true if and only if the blue eyed islanders deduced their own eye colour the previous day. The right hand side is true if and only if the islanders would have left the previous day if the actual number of blue eyed islanders was <code>B<\code>. Therefore the entire iff statement is true if and only if the actual events the previous day are consistent with what would have happened the previous day if <code>B<\code> was the actual number of blue eyed islanders.
+
+To illustrate how this works try substituting <code>b = 2<\code> into this function.
+
+On day zero it returns <code>island_rules 0 2 B := (B = 2 ∨ B = 1) ∧ 0 < B<\code>, so 1 and 2 are the only possibilities, and since there are two possibilities the islanders do not leave.
+
+On day one it returns <code> island_rules 0 2 B ∧ ((∀ C, island_rules 0 2 C → C = 2) ↔ ∀ C, island_rules 0 B C → C = B)<\code>. <code>island_rules 0 2 B := (B = 2 ∨ B = 1) ∧ 0 < B<\code> which equals <code>B = 2 ∨ B = 1<\code>, so we know that the only possibilities are 1 and 2 for now. Now we can check which of these values is consistent with the second part of the proposition. Obviously <code>B = 2<\code> is consistent since substituting <code>B = 2<\code> leaves both sides of the iff statement the same.
+
+Let's try <code>B = 1<\code>. The the statement becomes <code>(∀ C, island_rules 0 2 C → C = 2) ↔ ∀ C, island_rules 0 1 C → C = 1<\code>. We know <code>island_rules 0 2 C<\code> is equivalent to the statement <code>C = 2 ∨ C = 1<\code>, so the left hand side becomes <code>∀ C, C = 2 ∨ C = 1 → C = 2<\code>. This is clearly false, <code>C = 1<\code> is a counterexample to this.
+
+Now look at the right hand side. By definition <code>island_rules 0 1 C<\code> is equal to <code>(C = 1 ∨ C = 0) ∧ 0 < C<\code>. Clearly this is equivalent to <code>C = 1<\code>. So the left hand side becomes <code>∀ C, C = 1 → C = 1<\code>, which is true. This is because if the actual number of blue eyed islanders was 1, they would have left the previous day. So for <code>C = 1<\code> the iff statement is equivalent to <code>false ↔ true<\code>, so <code>B = 1<\code> is not a possibility. Therefore the only possibility on day 1 (note out by one error due to starting at day 0) is 2, so the blue eyed islanders will leave.
+
+Now that we have defined the "rules", the statement of the theorem proved is this. The left hand side indicates whether or not the blue eyed islanders leave.
+<code>
+lemma blue_eyed_islander {d b} (hb0 : 0 < b) : (∀ B, island_rules d b B → B = b) ↔ b ≤ d + 1
+<\code>
+
+### Proof ###
+
+First we prove a trivial lemma, saying that the conditions on day zero hold on any other day
+
+<code>
+lemma island_rules_zero_of_island_rules : ∀ {d b B : ℕ}, island_rules d b B → (B = b ∨ B = b - 1) ∧ 0 < B
+| 0     b B h := h
+| (d+1) b B h := island_rules_zero_of_island_rules h.left
+<\code>
+
+Next we prove the first direction of the iff, that they leave by day b-1. This proof is easier to read in a Lean editor.
+
+<code>
+theorem blue_eyed_islander_mp : ∀ {d b}, 0 < b → b ≤ d + 1 → ∀ B, island_rules d b B → B = b
+| 0 b hb0 hdb B hir := begin
+    have : b = 1, from le_antisymm hdb (succ_le_of_lt hb0),
+    unfold island_rules at hir,
+    cases hir.left with h h,
+    { exact h },
+    { simp [this, *, lt_irrefl] at * }
+  end
+| (d+1) b hb hdbB B hir :=
+  have (B = b ∨ B = b - 1) ∧ 0 < B, from island_rules_zero_of_island_rules hir,
+  begin
+    unfold island_rules at hir,
+    cases this.left with h h,
+    { exact h },
+    { /- the case B = b - 1 -/
+      have hb0 : 0 < b - 1, from h ▸ this.right,
+      have hb1 : 1 ≤ b, from le_trans (succ_le_of_lt hb0) (nat.sub_le_self _ _),
+      have hdbB' : b - 1 ≤ d + 1, from nat.sub_le_right_iff_le_add.2 hdbB,
+      /- by our induction hypothesis, they would have left on day d if the actual number was b - 1 -/
+      have ih : ∀ C : ℕ, island_rules d B C → C = B, from h.symm ▸ blue_eyed_islander_mp hb0 hdbB',
+      /- From the definition of island_rules, this means they left yesterday -/
+      rw ← hir.right at ih,
+      /- Slightly strange proof, even though we know B = b - 1 and we're trying to prove
+        B = b, we don't find a contradiction, we just prove B = b directly -/
+      exact ih B hir.left }
+  end
+<\code>
+
+Next we prove a trivial lemma about naturals that kept coming up
+
+<code>
+theorem nat.sub_one_ne_self_of_pos {a : ℕ} (ha : 0 < a) : a - 1 ≠ a :=
+ne_of_lt (nat.sub_lt_self ha dec_trivial)
+<\code>
+
+Next we prove the other direction of the if and only if. This is the harder direction, and it has been stated in a slightly different, but equivalent way to make it easier to prove.
+
+<code>
+lemma blue_eyed_islander_mpr : ∀ {d b}, 0 < b → d + 1 < b → ∀ B, island_rules d b B ↔ (B = b ∨ B = b - 1)
+| 0     b hb0 hdb B := begin
+  unfold island_rules,
+  split,
+  { exact λ h, h.left },
+  { assume hbB,
+    split,
+    { exact hbB },
+    { cases hbB with hbB hbB,
+      { exact hbB.symm ▸ hb0 },
+      { exact hbB.symm ▸ nat.sub_pos_of_lt hdb } } }
+  end
+| (succ d) b hb0 hdb B :=
+begin
+  split,
+  { exact λ h, (island_rules_zero_of_island_rules h).left },
+  { assume hbB,
+    have hb10 : 0 < b - 1, from nat.sub_pos_of_lt (lt_trans dec_trivial hdb),
+    have hdb1 : d + 1 < b - 1, from nat.lt_sub_right_of_add_lt hdb,
+    /- Use our induction hypothesis twice. For both possible values of B, the islanders
+      did not leave the previous day. This means we have no new information -/
+    have ihb : ∀ B : ℕ, island_rules d b B ↔ B = b ∨ B = b - 1,
+      from blue_eyed_islander_mpr hb0 (lt_trans (lt_succ_self _) hdb),
+    have ihb1 : ∀ B : ℕ, island_rules d (b - 1) B ↔ B = b - 1 ∨ B = b - 1 - 1,
+      from blue_eyed_islander_mpr hb10 hdb1,
+    unfold island_rules,
+    split,
+    { rw ihb,
+      exact hbB },
+    /- the interesting part of the proof starts here, we have to prove that either value of B is
+      possible -/
+    { cases hbB with hbB hbB,
+      { /- case B = b is easy -/
+        rw hbB },
+      { /- case B = b - 1 is harder -/
+        /- By our induction hypotheses it was impossible to deduce the value of `b` yesterday in both
+          the real world, and for our hypothesized value of `B`, which is `b - 1`. This means both sides
+          of the iff statement are false -/
+        simp only [ihb, ihb1, hbB],
+        /- After applying the induction hypothesis, it is now obvious that both sides are false,
+          and the proof is easy from now on -/
+        apply iff_of_false,
+        { assume h,
+          have : b - 1 = b, from h (b - 1) (or.inr rfl),
+          exact nat.sub_one_ne_self_of_pos hb0 this },
+        { assume h,
+          have : b - 1 - 1 = b - 1, from h (b - 1 - 1) (or.inr rfl),
+          exact nat.sub_one_ne_self_of_pos hb10 this } } } }
+end
+<\code>
+
+Proving the final lemma from the iff requires a small amount of work.
+
+<code>
+lemma blue_eyed_islander {d b} (hb0 : 0 < b) : (∀ B, island_rules d b B → B = b) ↔ b ≤ d + 1 :=
+begin
+  split,
+  { assume h,
+    refine le_of_not_gt (λ hbd : d + 1 < b, _),
+    have := blue_eyed_islander_mpr hb0 hbd,
+    have : b - 1 = b, from h (b - 1) ((this (b - 1)).mpr (or.inr rfl)),
+    exact nat.sub_one_ne_self_of_pos hb0 this },
+  { exact blue_eyed_islander_mp hb0 }
+end
+<\code>
+
+### Alternative proof ###
+
+In the proof above we proved it for any number of blue eyed islanders. However the problem sheet only asked us to prove it in the case where there were 100 blue eyed islanders, and there is a simple way to prove it in this case.
+
+If we look at our function island_rules, it has type <code>ℕ → ℕ → ℕ → Prop<\code>, which is actually the same as <code>ℕ → ℕ → set ℕ <\code>, since <code>set ℕ = (ℕ → Prop)<\code> by definition. The set it returns is actually always a finite set, since it is always a subset of <code>{b, b - 1}<\code>. There is a Type in Lean called a <code>finset<\code>, for finite sets, which is not <code>ℕ → Prop<\code>, but actually stores a list of all the elements, meaning you can check whether an number is in the finset or not, and actually print a list of all the elements. We can rewrite our function <code>island_rules<\code> to return a <code>finset ℕ<\code>, instead of a <code>set ℕ<\code>
+
+<code>
+def island_rules2 : ℕ → ℕ → finset ℕ
+| 0     b := ({b - 1, b} : finset ℕ).filter (> 0)
+| (d+1) b := (island_rules2 d b).filter
+  (λ B, (∀ C ∈ island_rules2 d b, C = b) ↔ (∀ C ∈ island_rules2 d B, C = B))
+<\code>
+
+<code>filter<\code> is just a function that filters a finset according given a decidable predicate. Decidable means that, given a natural number, there is a Lean program for determining whether the predicate holds for that natural number or not. <code> >0 <\code> is obviously decidable.
+
+The second predicate <code> (λ B, (∀ C ∈ island_rules2 d b, C = b) ↔ (∀ C ∈ island_rules2 d B, C = B)) <\code> is also decidable. An iff statement is decidable, if both sides of the iff are decidable, and <code>(∀ C ∈ island_rules2 d b, C = b)<\code> is decidable since <code>island_rules2 d b<\code> is a finite set, Lean can determing this by checking it for all the elements of this finite set.
+
+This means the function is computable, and we can evaluate the set of possibilities, given any day or number of blue eyed islanders
+<code>
+#eval island_rules2 5 7 -- {6, 7}
+#eval island_rules2 6 7 -- {7}
+<\code>
+
+To prove the lemma we simply have to evaluate this function on every day less than 100, and on day one hundred. After providing a few more decidable instances, we can prove the lemma with <code>dec_trivial<\code>. This proof takes a long time for Lean to check.
+
+<code>
+lemma island_rules_iff (d : ℕ) : ∀ b B, island_rules d b B ↔ B ∈ island_rules2 d b :=
+by induction d; simp [island_rules, island_rules2, *]; finish
+
+instance (d b B) : decidable (island_rules d b B) :=
+decidable_of_iff _ (island_rules_iff _ _ _).symm
+
+lemma island_rules_iff' (d : ℕ) : ∀ b, (∀ B, island_rules d b B → B = b) ↔ (∀ B ∈ island_rules2 d b, B = b) :=
+by simp [island_rules_iff]
+
+instance dec2 : decidable_rel (λ d b, ∀ B, island_rules d b B → B = b) :=
+λ d b, decidable_of_iff _ (island_rules_iff' d b).symm
+
+lemma blue_eyed_islander : ∀ d < 100, (∀ B, island_rules d 100 B → B = 100) ↔ d = 99 :=
+dec_trivial
+<\code>
