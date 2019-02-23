@@ -1,3 +1,1697 @@
+import topology.metric_space.basic
+open nat
+structure aux : Type 1 :=
+(space  : Type)
+(metric : metric_space space)
+
+set_option eqn_compiler.zeta true
+
+noncomputable def my_def (X : ℕ → Type) [m : ∀n, metric_space (X n)] : ∀n:ℕ, aux
+| 0 :=
+  { space := X 0,
+    metric := by apply_instance }
+| (succ n) := 
+  { space := prod (my_def n).space (X n.succ),
+    metric := @prod.metric_space_max _ _ (my_def n).metric _ }
+
+#print prefix my_def
+set_option pp.all true
+#print my_def._main
+
+example : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n : nat),
+  @eq.{2} aux (@my_def._main X m (nat.succ n))
+    {space := prod.{0 0} ((@my_def._main X m n).space) (X (nat.succ n)),
+     metric := @prod.metric_space_max.{0 0} ((@my_def._main X m n).space) (X (nat.succ n))
+                 ((@my_def._main X m n).metric)
+                 (m (nat.succ n))} := 
+  λ _ _ _, by tactic.reflexivity tactic.transparency.all
+
+example : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n : nat),
+  @eq.{2} aux {space := prod.{0 0} ((@my_def._main X m n).space) (X (nat.succ n)),
+     metric := @prod.metric_space_max.{0 0} ((@my_def._main X m n).space) (X (nat.succ n))
+                 ((@my_def._main X m n).metric)
+                 (m (nat.succ n))}
+{space := prod.{0 0} ((@my_def X m n).space) (X (nat.succ n)),
+     metric := @prod.metric_space_max.{0 0} ((@my_def X m n).space) (X (nat.succ n)) 
+     ((@my_def X m n).metric)
+                 (m (nat.succ n))} := λ _ _ _, rfl
+example : my_def = my_def._main := rfl
+
+lemma b : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n : nat),
+  @eq.{2} aux 
+    {space := prod.{0 0} ((@my_def X m n).space) (X (nat.succ n)),
+     metric := @prod.metric_space_max.{0 0} ((@my_def X m n).space) (X (nat.succ n)) 
+     ((@my_def X m n).metric)
+                 (m (nat.succ n))} 
+    (@my_def X m (nat.succ n)) 
+  := λ _ _ _, by tactic.reflexivity tactic.transparency.all
+
+example (X : ℕ → Type) [m : ∀n, metric_space (X n)] (n : ℕ) : 
+  my_def X (n+1) = ⟨(my_def X n).space × (X n.succ), 
+    @prod.metric_space_max.{0 0} _ _ (my_def X n).metric _⟩ := 
+by refl
+
+#print my_def._main
+#exit
+import tactic
+
+class A (α : Type*) :=
+(a : α)
+
+class B (α : Type*) extends A α :=
+(b : α)
+
+class C (α : Type*) :=
+(a : α)
+(t : true)
+
+instance C.to_A (α : Type*) [C α] : A α :=
+{ ..show C α, by apply_instance }
+
+instance B.to_C {α : Type*} [B α] : C α :=
+{ t := trivial, .. show B α, by apply_instance }
+
+def B.to_A' (α : Type*) [n : B α] : A α :=
+A.mk (B.to_A α).a
+
+def a' {α : Type*} [A α] := A.a α
+
+example {α : Type*} [n : B α] (x : α) (h : @a' _ (B.to_A α) = x) : @a' _ (C.to_A α) = x :=
+by rw h
+
+
+namespace foo
+open classical
+
+local attribute [instance] classical.prop_decidable
+@[derive decidable_eq] inductive value : Type
+
+@[derive decidable_eq] structure foo :=
+(bar : ℕ)
+
+end foo
+
+#exit
+example {p : Prop} : (∀ q, (p → q) → q) → p :=
+λ h, classical.by_contradiction (h false)
+
+
+import logic.function data.quot data.set.basic
+universe u
+inductive tree_aux (α : Type u) : bool → Type u
+| nil : tree_aux ff
+| cons : α → tree_aux ff → tree_aux ff
+| mk_tree : α → tree_aux ff → tree_aux tt
+
+
+variables (α : Type*) (β : Type*) (γ : Type*) (δ : Type*)
+
+open function
+
+example {p q : Prop} (h : p → q) : ¬q → ¬p := (∘ h)
+
+#check ((∘) ∘ (∘)) not eq
+#reduce (λ (x : α → β) (y : δ → γ → α) (z : δ) (w : γ), ((∘) ∘ (∘)) x y z w)
+
+def fun_setoid {α β} (f : α → β) : setoid α :=
+{ r := (∘ f) ∘ eq ∘ f,
+  iseqv := ⟨λ _, rfl, λ _ _, eq.symm, λ _ _ _, eq.trans⟩ }
+
+#reduce (λ f : α → β, ((∘ f) ∘ eq ∘ f))
+
+structure quotient_map (α β : Type*) :=
+(to_fun : α → β)
+(inv_fun : β → quotient (fun_setoid to_fun))
+(right_inverse : right_inverse inv_fun
+  (λ a : quotient (fun_setoid to_fun), quotient.lift_on' a to_fun (λ _ _, id)))
+
+example {α : Type*} [s : setoid α] : quotient_map α (quotient s) :=
+{ to_fun := quotient.mk,
+  inv_fun := λ a, quotient.lift_on a (λ a, (quotient.mk' a : quotient (fun_setoid quotient.mk)))
+    (λ a b h, quotient.sound' (quotient.sound h)),
+  right_inverse := λ x, quotient.induction_on x (λ _, rfl) }
+
+
+
+#exit
+import topology.metric_space.isometry
+
+variables {X : Type*} {Y : Type*} [metric_space X] [metric_space Y] (i : X ≃ᵢ Y)
+open metric
+
+def jaih : bool := true
+
+#print jaih
+#print to_bool
+
+#print (true : bool)
+
+#exit
+import logic.function
+
+universes u v
+axiom choice : Π (α : Sort u), nonempty (nonempty α → α)
+
+example : nonempty (Π {α : Sort u}, nonempty α → α) :=
+let ⟨x⟩ := choice (Σ' α : Sort u, nonempty α) in
+have _ := x _,
+⟨_⟩
+#reduce function.cantor_surjective
+#exit
+import topology.continuity
+open set
+variables {X : Type*} {Y : Type*} [topological_space X] [topological_space Y]
+#print prod.topological_space
+#print topological_space.generate_open
+#reduce (@prod.topological_space X Y _ _).is_open
+def prod_topology : topological_space (X × Y) :=
+{ is_open := λ R, ∃ S : set (set (X × Y)), R = ⋃₀ S ∧
+    ∀ s ∈ S, ∃ (U : set X) (hU : is_open U) (V : set Y) (hV : is_open V), s = set.prod U V,
+  is_open_univ := sorry,
+  is_open_inter := sorry,
+  is_open_sUnion := sorry }
+example : @prod_topology X Y _ _ = prod.topological_space := rfl
+attribute [instance, priority 1000] prod_topology
+
+example (U : set X) (V : set Y) : set.prod U V = prod.fst ⁻¹' U ∩ prod.snd ⁻¹' V := rfl
+#print topolog
+example {Z : Type*}[topological_space Z]
+  (f : Z → X × Y) (hX : continuous (prod.fst ∘ f)) (hY : continuous (prod.snd ∘ f)) :
+  continuous f :=
+λ S ⟨T, hT⟩, begin
+  rw [hT.1, preimage_sUnion],
+  refine is_open_Union (λ s, is_open_Union (λ hs, _)),
+  rcases hT.2 s hs with ⟨U, hU, V, hV, hUV⟩,
+  rw hUV,
+  show is_open (((prod.fst ∘ f)⁻¹' U) ∩ (prod.snd ∘ f)⁻¹' V),
+  exact is_open_inter (hX _ hU) (hY _ hV)
+end
+
+example {X Y: Type*} [topological_space X] [topological_space Y]
+  (f : X → Y) (hf : continuous f) (V : set Y) : is_closed V → is_closed (f ⁻¹' V) :=
+hf _
+
+#print set.prod
+#print has_seq
+example {X Y Z : Type*} [topological_space X] [topological_space Y] [topological_space Z]
+  (f : Z → X × Y) (hX : continuous (prod.fst ∘ f)) (hY : continuous (prod.snd ∘ f)) :
+  continuous f :=
+λ S hS, begin
+  rw is_open_prod_iff at hS,
+
+
+end
+#print g
+
+#exit
+import data.complex.exponential analysis.exponential algebra.field topology.algebra.topological_structures
+
+open real
+
+theorem continuous_cos_x_plus_x : continuous (λ x, cos x + x) :=
+continuous_add real.continuous_cos continuous_id
+
+theorem continuous_cos_x_plus_x' : continuous (λ x, cos x + x) :=
+begin
+ refine continuous_add _ _,
+ exact continuous_cos,
+ exact continuous_id,
+end
+
+namespace nzreal
+
+def nzreal := {r : ℝ // r ≠ 0}
+notation `ℝ*` := nzreal
+constants nzc nzd : nzreal
+
+-- one_ne_zero is zero_ne_one backwards
+instance nzreal.one : has_one nzreal := ⟨⟨(1:ℝ), one_ne_zero⟩⟩
+
+noncomputable instance nzreal.div : has_div nzreal :=
+ ⟨λ q r, ⟨q.val / r.val, div_ne_zero q.property r.property⟩⟩
+
+def nzreal_to_real (z : nzreal) : ℝ := subtype.val z
+instance : has_lift nzreal real := ⟨nzreal_to_real⟩
+
+class real.nzreal (r : ℝ) :=
+(p : ℝ*)
+(pf : r = ↑p)
+
+-- idea is copied from data.real.nnreal
+instance : has_coe ℝ* ℝ := ⟨subtype.val⟩
+
+-- copy from Kevin Buzzard post on "computable division by non-zero real"
+noncomputable instance : topological_space ℝ* := by unfold nzreal; apply_instance
+
+end nzreal
+
+-- almost the same as the proof for continuity of tangent
+theorem continuous_1_over_x : continuous (λ (x : ℝ*), 1/x) :=
+continuous_subtype_mk _ $ continuous_mul
+  (continuous_subtype_val.comp continuous_const)
+  (continuous_inv subtype.property
+    (continuous_subtype_val.comp continuous_id))
+
+#exit
+import data.complex.basic
+
+example {z : ℂ} :
+
+#exit
+import ring_theory.unique_factorization_domain
+
+namespace hidden
+
+constant α : Type
+
+@[instance] constant I : integral_domain α
+
+@[elab_as_eliminator] axiom induction_on_prime {P : α → Prop}
+  (a : α) (h₁ : P 0) (h₂ : ∀ x : α, is_unit x → P x)
+  (h₃ : ∀ a p : α, a ≠ 0 → prime p → P a → P (p * a)) : P a
+
+local infix ` ~ᵤ ` : 50 := associated
+
+#print associated
+
+lemma factors_aux (a : α) : a ≠ 0 → ∃ s : multiset α, a ~ᵤ s.prod ∧ ∀ x ∈ s, irreducible x :=
+induction_on_prime a (by simp)
+  (λ x hx hx0, ⟨0, by simpa [associated_one_iff_is_unit]⟩)
+  (λ a p ha0 hp ih hpa0, let ⟨s, hs₁, hs₂⟩ := ih ha0 in
+    ⟨p :: s, by rw multiset.prod_cons;
+      exact associated_mul_mul (associated.refl p) hs₁,
+    λ x hx, (multiset.mem_cons.1 hx).elim (λ hxp, hxp.symm ▸ irreducible_of_prime hp) (hs₂ _)⟩)
+
+@[simp] lemma mul_unit_dvd_iff {a b : α} {u : units α} : a * u ∣ b ↔ a ∣ b :=
+⟨λ ⟨d, hd⟩, by simp [hd, mul_assoc], λ ⟨d, hd⟩, ⟨(u⁻¹ : units α) * d, by simp [mul_assoc, hd]⟩⟩
+
+lemma dvd_iff_dvd_of_rel_left {a b c : α} (h : a ~ᵤ b) : a ∣ c ↔ b ∣ c :=
+let ⟨u, hu⟩ := h in hu ▸ mul_unit_dvd_iff.symm
+
+@[simp] lemma dvd_mul_unit_iff {a b : α} {u : units α} : a ∣ b * u ↔ a ∣ b :=
+⟨λ ⟨d, hd⟩, ⟨d * (u⁻¹ : units α), by simp [(mul_assoc _ _ _).symm, hd.symm]⟩,
+  λ h, dvd.trans h (by simp)⟩
+
+lemma dvd_iff_dvd_of_rel_right {a b c : α} (h : b ~ᵤ c) : a ∣ b ↔ a ∣ c :=
+let ⟨u, hu⟩ := h in hu ▸ dvd_mul_unit_iff.symm
+
+lemma ne_zero_iff_of_associated {a b : α} (h : a ~ᵤ b) : a ≠ 0 ↔ b ≠ 0 :=
+⟨λ ha, let ⟨u, hu⟩ := h in hu ▸ mul_ne_zero ha (units.ne_zero _),
+  λ hb, let ⟨u, hu⟩ := h.symm in hu ▸ mul_ne_zero hb (units.ne_zero _)⟩
+
+
+
+lemma irreducible_of_associated {p q : α} (h : irreducible p) :
+  p ~ᵤ q → irreducible q :=
+λ ⟨u, hu⟩, ⟨_, _⟩
+
+lemma prime_of_irreducible {p : α} : irreducible p → prime p :=
+induction_on_prime p (by simp) (λ p hp h, (h.1 hp).elim)
+  (λ a p ha0 hp ih hpa, (hpa.2 p a rfl).elim (λ h, (hp.2.1 h).elim)
+    (λ ⟨u, hu⟩, prime_of_associated hp ⟨u, hu ▸ rfl⟩))
+#print multiset.prod
+local attribute [instance] classical.dec
+
+lemma multiset.dvd_prod {a : α} {s : multiset α} : a ∈ s → a ∣ s.prod :=
+quotient.induction_on s (λ l a h, by simpa using list.dvd_prod h) a
+
+lemma exists_associated_mem_of_dvd_prod {p : α} (hp : prime p) {s : multiset α} :
+  (∀ r ∈ s, prime r) → p ∣ s.prod → ∃ q ∈ s, p ~ᵤ q :=
+multiset.induction_on s (by simp [mt is_unit_iff_dvd_one.2 hp.2.1])
+  (λ a s ih hs hps, begin
+    rw [multiset.prod_cons] at hps,
+    cases hp.2.2 _ _ hps with h h,
+    { use [a, by simp],
+      cases h with u hu,
+      cases ((irreducible_of_prime (hs a (multiset.mem_cons.2
+        (or.inl rfl)))).2 p u hu).resolve_left hp.2.1 with v hv,
+      exact ⟨v, by simp [hu, hv]⟩ },
+    { rcases ih (λ r hr, hs _ (multiset.mem_cons.2 (or.inr hr))) h with ⟨q, hq₁, hq₂⟩,
+      exact ⟨q, multiset.mem_cons.2 (or.inr hq₁), hq₂⟩ }
+  end)
+
+lemma associated_mul_left_cancel {a b c d : α} (h : a * b ~ᵤ c * d) (h₁ : a ~ᵤ c)
+  (ha : a ≠ 0) : b ~ᵤ d :=
+let ⟨u, hu⟩ := h in let ⟨v, hv⟩ := associated.symm h₁ in
+⟨u * (v : units α), (domain.mul_left_inj ha).1
+  begin
+    rw [← hv, mul_assoc c (v : α) d, mul_left_comm c, ← hu],
+    simp [hv.symm, mul_assoc, mul_comm, mul_left_comm]
+  end⟩
+
+noncomputable instance : unique_factorization_domain α :=
+{ factors := λ a, if ha : a = 0 then 0 else classical.some (factors_aux a ha),
+  factors_prod := λ a ha, by rw dif_neg ha;
+    exact associated.symm (classical.some_spec (factors_aux a ha)).1,
+  irreducible_factors := λ a ha, by rw dif_neg ha;
+    exact (classical.some_spec (factors_aux a ha)).2,
+  unique := λ f, multiset.induction_on f
+      (λ g _ hg h,
+        multiset.rel_zero_left.2 $
+          multiset.eq_zero_of_forall_not_mem (λ x hx,
+            have is_unit g.prod, by simpa [associated_one_iff_is_unit] using h.symm,
+            (hg x hx).1 (is_unit_iff_dvd_one.2 (dvd.trans (multiset.dvd_prod hx)
+              (is_unit_iff_dvd_one.1 this)))))
+      (λ p f ih g hf hg hfg,
+        let ⟨b, hbg, hb⟩ := exists_associated_mem_of_dvd_prod
+          (prime_of_irreducible (hf p (by simp)))
+          (λ q hq, prime_of_irreducible (hg _ hq)) $
+            (dvd_iff_dvd_of_rel_right hfg).1
+              (show p ∣ (p :: f).prod, by simp) in
+        begin
+          rw ← multiset.cons_erase hbg,
+          exact multiset.rel.cons hb (ih (λ q hq, hf _ (by simp [hq]))
+            (λ q (hq : q ∈ g.erase b), hg q (multiset.mem_of_mem_erase hq))
+            (associated_mul_left_cancel
+              (by rwa [← multiset.prod_cons, ← multiset.prod_cons, multiset.cons_erase hbg]) hb
+            (nonzero_of_irreducible (hf p (by simp)))))
+        end),
+  ..I }
+
+end hidden
+#exit
+/-
+Copyright (c) 2018 Jeremy Avigad. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Author: Jeremy Avigad
+
+Cast of characters:
+
+`P`   : a polynomial functor
+`W`   : its W-type
+`M`   : its M-type
+`F`   : a functor
+`q`   : `qpf` data, representing `F` as a quotient of `P`
+
+The main goal is to construct:
+
+`fix`   : the initial algebra with structure map `F fix → fix`.
+`cofix` : the final coalgebra with structure map `cofix → F cofix`
+
+We also show that the composition of qpfs is a qpf, and that the quotient of a qpf
+is a qpf.
+-/
+import tactic.interactive data.multiset
+universe u
+
+/-
+Facts about the general quotient needed to construct final coalgebras.
+-/
+
+
+
+
+namespace quot
+
+def factor {α : Type*} (r s: α → α → Prop) (h : ∀ x y, r x y → s x y) :
+  quot r → quot s :=
+quot.lift (quot.mk s) (λ x y rxy, quot.sound (h x y rxy))
+
+def factor_mk_eq {α : Type*} (r s: α → α → Prop) (h : ∀ x y, r x y → s x y) :
+  factor r s h ∘ quot.mk _= quot.mk _ := rfl
+
+end quot
+
+/-
+A polynomial functor `P` is given by a type `A` and a family `B` of types over `A`. `P` maps
+any type `α` to a new type `P.apply α`.
+
+An element of `P.apply α` is a pair `⟨a, f⟩`, where `a` is an element of a type `A` and
+`f : B a → α`. Think of `a` as the shape of the object and `f` as an index to the relevant
+elements of `α`.
+-/
+
+structure pfunctor :=
+(A : Type u) (B : A → Type u)
+
+namespace pfunctor
+
+variables (P : pfunctor) {α β : Type u}
+
+-- TODO: generalize to psigma?
+def apply (α : Type*) := Σ x : P.A, P.B x → α
+
+def map {α β : Type*} (f : α → β) : P.apply α → P.apply β :=
+λ ⟨a, g⟩, ⟨a, f ∘ g⟩
+
+instance : functor P.apply := {map := @map P}
+
+theorem map_eq {α β : Type*} (f : α → β) (a : P.A) (g : P.B a → α) :
+  @functor.map P.apply _ _ _ f ⟨a, g⟩ = ⟨a, f ∘ g⟩ :=
+rfl
+
+theorem id_map {α : Type*} : ∀ x : P.apply α, id <$> x = id x :=
+λ ⟨a, b⟩, rfl
+
+theorem comp_map {α β γ : Type*} (f : α → β) (g : β → γ) :
+  ∀ x : P.apply α, (g ∘ f) <$> x = g <$> (f <$> x) :=
+λ ⟨a, b⟩, rfl
+
+instance : is_lawful_functor P.apply :=
+{id_map := @id_map P, comp_map := @comp_map P}
+
+inductive W
+| mk (a : P.A) (f : P.B a → W) : W
+
+def W_dest : W P → P.apply (W P)
+| ⟨a, f⟩ := ⟨a, f⟩
+
+def W_mk : P.apply (W P) → W P
+| ⟨a, f⟩ := ⟨a, f⟩
+
+@[simp] theorem W_dest_W_mk (p : P.apply (W P)) : P.W_dest (P.W_mk p) = p :=
+by cases p; reflexivity
+
+@[simp] theorem W_mk_W_dest (p : W P) : P.W_mk (P.W_dest p) = p :=
+by cases p; reflexivity
+
+end pfunctor
+
+/-
+Quotients of polynomial functors.
+
+Roughly speaking, saying that `F` is a quotient of a polynomial functor means that for each `α`,
+elements of `F α` are represented by pairs `⟨a, f⟩`, where `a` is the shape of the object and
+`f` indexes the relevant elements of `α`, in a suitably natural manner.
+-/
+
+class qpf (F : Type u → Type u) [functor F] :=
+(P         : pfunctor.{u})
+(abs       : Π {α}, P.apply α → F α)
+(repr      : Π {α}, F α → P.apply α)
+(abs_repr  : ∀ {α} (x : F α), abs (repr x) = x)
+(abs_map   : ∀ {α β} (f : α → β) (p : P.apply α), abs (f <$> p) = f <$> abs p)
+
+namespace qpf
+variables {F : Type u → Type u} [functor F] [q : qpf F]
+include q
+
+attribute [simp] abs_repr
+
+/-
+Show that every qpf is a lawful functor.
+
+Note: every functor has a field, map_comp, and is_lawful_functor has the defining
+characterization. We can only propagate the assumption.
+-/
+
+theorem id_map {α : Type*} (x : F α) : id <$> x = x :=
+by { rw ←abs_repr x, cases repr x with a f, rw [←abs_map], reflexivity }
+
+theorem comp_map {α β γ : Type*} (f : α → β) (g : β → γ) (x : F α) :
+  (g ∘ f) <$> x = g <$> f <$> x :=
+by { rw ←abs_repr x, cases repr x with a f, rw [←abs_map, ←abs_map, ←abs_map], reflexivity }
+
+theorem is_lawful_functor
+  (h : ∀ α β : Type u, @functor.map_const F _ α _ = functor.map ∘ function.const β) : is_lawful_functor F :=
+{ map_const_eq := h,
+  id_map := @id_map F _ _,
+  comp_map := @comp_map F _ _ }
+
+/-
+Think of trees in the `W` type corresponding to `P` as representatives of elements of the
+least fixed point of `F`, and assign a canonical representative to each equivalence class
+of trees.
+-/
+
+/-- does recursion on `q.P.W` using `g : F α → α` rather than `g : P α → α` -/
+def recF {α : Type*} (g : F α → α) : q.P.W → α
+| ⟨a, f⟩ := g (abs ⟨a, λ x, recF (f x)⟩)
+
+theorem recF_eq {α : Type*} (g : F α → α) (x : q.P.W) :
+  recF g x = g (abs (recF g <$> q.P.W_dest x)) :=
+by cases x; reflexivity
+
+theorem recF_eq' {α : Type*} (g : F α → α) (a : q.P.A) (f : q.P.B a → q.P.W) :
+  recF g ⟨a, f⟩ = g (abs (recF g <$> ⟨a, f⟩)) :=
+rfl
+
+/-- two trees are equivalent if their F-abstractions are -/
+inductive Wequiv : q.P.W → q.P.W → Prop
+| ind (a : q.P.A) (f f' : q.P.B a → q.P.W) :
+    (∀ x, Wequiv (f x) (f' x)) → Wequiv ⟨a, f⟩ ⟨a, f'⟩
+| abs (a : q.P.A) (f : q.P.B a → q.P.W) (a' : q.P.A) (f' : q.P.B a' → q.P.W) :
+    abs ⟨a, f⟩ = abs ⟨a', f'⟩ → Wequiv ⟨a, f⟩ ⟨a', f'⟩
+| trans (u v w : q.P.W) : Wequiv u v → Wequiv v w → Wequiv u w
+
+/-- recF is insensitive to the representation -/
+theorem recF_eq_of_Wequiv {α : Type u} (u : F α → α) (x y : q.P.W) :
+  Wequiv x y → recF u x = recF u y :=
+begin
+  cases x with a f, cases y with b g,
+  intro h, induction h,
+  case qpf.Wequiv.ind : a f f' h ih
+    { simp only [recF_eq', pfunctor.map_eq, function.comp, ih] },
+  case qpf.Wequiv.abs : a f a' f' h ih
+    { simp only [recF_eq', abs_map, h] },
+  case qpf.Wequiv.trans : x y z e₁ e₂ ih₁ ih₂
+    { exact eq.trans ih₁ ih₂ }
+end
+
+theorem Wequiv.abs' (x y : q.P.W) (h : abs (q.P.W_dest x) = abs (q.P.W_dest y)) :
+  Wequiv x y :=
+by { cases x, cases y, apply Wequiv.abs, apply h }
+
+theorem Wequiv.refl (x : q.P.W) : Wequiv x x :=
+by cases x with a f; exact Wequiv.abs a f a f rfl
+
+theorem Wequiv.symm (x y : q.P.W) : Wequiv x y → Wequiv y x :=
+begin
+  cases x with a f, cases y with b g,
+  intro h, induction h,
+  case qpf.Wequiv.ind : a f f' h ih
+    { exact Wequiv.ind _ _ _ ih },
+  case qpf.Wequiv.abs : a f a' f' h ih
+    { exact Wequiv.abs _ _ _ _ h.symm },
+  case qpf.Wequiv.trans : x y z e₁ e₂ ih₁ ih₂
+    { exact qpf.Wequiv.trans _ _ _ ih₂ ih₁}
+end
+
+/-- maps every element of the W type to a canonical representative -/
+def Wrepr : q.P.W → q.P.W := recF (q.P.W_mk ∘ repr)
+
+theorem Wrepr_equiv (x : q.P.W) : Wequiv (Wrepr x) x :=
+begin
+  induction x with a f ih,
+  apply Wequiv.trans,
+  { change Wequiv (Wrepr ⟨a, f⟩) (q.P.W_mk (Wrepr <$> ⟨a, f⟩)),
+    apply Wequiv.abs',
+    have : Wrepr ⟨a, f⟩ = q.P.W_mk (repr (abs (Wrepr <$> ⟨a, f⟩))) := rfl,
+    rw [this, pfunctor.W_dest_W_mk, abs_repr],
+    reflexivity },
+  apply Wequiv.ind, exact ih
+end
+
+/-
+Define the fixed point as the quotient of trees under the equivalence relation.
+-/
+
+def W_setoid : setoid q.P.W :=
+⟨Wequiv, @Wequiv.refl _ _ _, @Wequiv.symm _ _ _, @Wequiv.trans _ _ _⟩
+
+local attribute [instance] W_setoid
+
+def fix (F : Type u → Type u) [functor F] [q : qpf F]:= quotient (W_setoid : setoid q.P.W)
+
+def fix.rec {α : Type*} (g : F α → α) : fix F → α :=
+quot.lift (recF g) (recF_eq_of_Wequiv g)
+
+def fix_to_W : fix F → q.P.W :=
+quotient.lift Wrepr (recF_eq_of_Wequiv (λ x, q.P.W_mk (repr x)))
+
+def fix.mk (x : F (fix F)) : fix F := quot.mk _ (q.P.W_mk (fix_to_W <$> repr x))
+
+def fix.dest : fix F → F (fix F) := fix.rec (functor.map fix.mk)
+
+theorem fix.rec_eq {α : Type*} (g : F α → α) (x : F (fix F)) :
+  fix.rec g (fix.mk x) = g (fix.rec g <$> x) :=
+have recF g ∘ fix_to_W = fix.rec g,
+  by { apply funext, apply quotient.ind, intro x, apply recF_eq_of_Wequiv,
+       apply Wrepr_equiv },
+begin
+  conv { to_lhs, rw [fix.rec, fix.mk], dsimp },
+  cases h : repr x with a f,
+  rw [pfunctor.map_eq, recF_eq, ←pfunctor.map_eq, pfunctor.W_dest_W_mk, ←pfunctor.comp_map,
+      abs_map, ←h, abs_repr, this]
+end
+
+theorem fix.ind_aux (a : q.P.A) (f : q.P.B a → q.P.W) :
+  fix.mk (abs ⟨a, λ x, ⟦f x⟧⟩) = ⟦⟨a, f⟩⟧ :=
+have fix.mk (abs ⟨a, λ x, ⟦f x⟧⟩) = ⟦Wrepr ⟨a, f⟩⟧,
+  begin
+    apply quot.sound, apply Wequiv.abs',
+    rw [pfunctor.W_dest_W_mk, abs_map, abs_repr, ←abs_map, pfunctor.map_eq],
+    conv { to_rhs, simp only [Wrepr, recF_eq, pfunctor.W_dest_W_mk, abs_repr] },
+    reflexivity
+  end,
+by { rw this, apply quot.sound, apply Wrepr_equiv }
+
+theorem fix.ind {α : Type*} (g₁ g₂ : fix F → α)
+    (h : ∀ x : F (fix F), g₁ <$> x = g₂ <$> x → g₁ (fix.mk x) = g₂ (fix.mk x)) :
+  ∀ x, g₁ x = g₂ x :=
+begin
+  apply quot.ind,
+  intro x,
+  induction x with a f ih,
+  change g₁ ⟦⟨a, f⟩⟧ = g₂ ⟦⟨a, f⟩⟧,
+  rw [←fix.ind_aux a f], apply h,
+  rw [←abs_map, ←abs_map, pfunctor.map_eq, pfunctor.map_eq],
+  dsimp [function.comp],
+  congr, ext x, apply ih
+end
+
+theorem fix.rec_unique {α : Type*} (g : F α → α) (h : fix F → α)
+    (hyp : ∀ x, h (fix.mk x) = g (h <$> x)) :
+  fix.rec g = h :=
+begin
+  ext x,
+  apply fix.ind,
+  intros x hyp',
+  rw [hyp, ←hyp', fix.rec_eq]
+end
+
+theorem fix.mk_dest (x : fix F) : fix.mk (fix.dest x) = x :=
+begin
+  change (fix.mk ∘ fix.dest) x = id x,
+  apply fix.ind,
+  intro x, dsimp,
+  rw [fix.dest, fix.rec_eq, id_map, comp_map],
+  intro h, rw h
+end
+
+theorem fix.dest_mk (x : F (fix F)) : fix.dest (fix.mk x) = x :=
+begin
+  unfold fix.dest, rw [fix.rec_eq, ←fix.dest, ←comp_map],
+  conv { to_rhs, rw ←(id_map x) },
+  congr, ext x, apply fix.mk_dest
+end
+
+end qpf
+
+/- Axiomatize the M construction for now -/
+
+-- TODO: needed only because we axiomatize M
+noncomputable theory
+
+namespace pfunctor
+
+axiom M (P : pfunctor.{u}) : Type u
+
+-- TODO: are the universe ascriptions correct?
+variables {P : pfunctor.{u}} {α : Type u}
+
+axiom M_dest : M P → P.apply (M P)
+
+axiom M_corec : (α → P.apply α) → (α → M P)
+
+axiom M_dest_corec (g : α → P.apply α) (x : α) :
+  M_dest (M_corec g x) = M_corec g <$> g x
+
+axiom M_bisim {α : Type*} (R : M P → M P → Prop)
+    (h : ∀ x y, R x y → ∃ a f f',
+      M_dest x = ⟨a, f⟩ ∧
+      M_dest y = ⟨a, f'⟩ ∧
+      ∀ i, R (f i) (f' i)) :
+  ∀ x y, R x y → x = y
+
+theorem M_bisim' {α : Type*} (Q : α → Prop) (u v : α → M P)
+    (h : ∀ x, Q x → ∃ a f f',
+      M_dest (u x) = ⟨a, f⟩ ∧
+      M_dest (v x) = ⟨a, f'⟩ ∧
+      ∀ i, ∃ x', Q x' ∧ f i = u x' ∧ f' i = v x') :
+  ∀ x, Q x → u x = v x :=
+λ x Qx,
+let R := λ w z : M P, ∃ x', Q x' ∧ w = u x' ∧ z = v x' in
+@M_bisim P (M P) R
+  (λ x y ⟨x', Qx', xeq, yeq⟩,
+    let ⟨a, f, f', ux'eq, vx'eq, h'⟩ := h x' Qx' in
+      ⟨a, f, f', xeq.symm ▸ ux'eq, yeq.symm ▸ vx'eq, h'⟩)
+  _ _ ⟨x, Qx, rfl, rfl⟩
+
+-- for the record, show M_bisim follows from M_bisim'
+theorem M_bisim_equiv (R : M P → M P → Prop)
+    (h : ∀ x y, R x y → ∃ a f f',
+      M_dest x = ⟨a, f⟩ ∧
+      M_dest y = ⟨a, f'⟩ ∧
+      ∀ i, R (f i) (f' i)) :
+  ∀ x y, R x y → x = y :=
+λ x y Rxy,
+let Q : M P × M P → Prop := λ p, R p.fst p.snd in
+M_bisim' Q prod.fst prod.snd
+  (λ p Qp,
+    let ⟨a, f, f', hx, hy, h'⟩ := h p.fst p.snd Qp in
+    ⟨a, f, f', hx, hy, λ i, ⟨⟨f i, f' i⟩, h' i, rfl, rfl⟩⟩)
+  ⟨x, y⟩ Rxy
+
+theorem M_corec_unique (g : α → P.apply α) (f : α → M P)
+    (hyp : ∀ x, M_dest (f x) = f <$> (g x)) :
+  f = M_corec g :=
+begin
+  ext x,
+  apply M_bisim' (λ x, true) _ _ _ _ trivial,
+  clear x,
+  intros x _,
+  cases gxeq : g x with a f',
+  have h₀ : M_dest (f x) = ⟨a, f ∘ f'⟩,
+  { rw [hyp, gxeq, pfunctor.map_eq] },
+  have h₁ : M_dest (M_corec g x) = ⟨a, M_corec g ∘ f'⟩,
+  { rw [M_dest_corec, gxeq, pfunctor.map_eq], },
+  refine ⟨_, _, _, h₀, h₁, _⟩,
+  intro i,
+  exact ⟨f' i, trivial, rfl, rfl⟩
+end
+
+def M_mk : P.apply (M P) → M P := M_corec (λ x, M_dest <$> x)
+
+theorem M_mk_M_dest (x : M P) : M_mk (M_dest x) = x :=
+begin
+  apply M_bisim' (λ x, true) (M_mk ∘ M_dest) _ _ _ trivial,
+  clear x,
+  intros x _,
+  cases Mxeq : M_dest x with a f',
+  have : M_dest (M_mk (M_dest x)) = ⟨a, _⟩,
+  { rw [M_mk, M_dest_corec, Mxeq, pfunctor.map_eq, pfunctor.map_eq] },
+  refine ⟨_, _, _, this, rfl, _⟩,
+  intro i,
+  exact ⟨f' i, trivial, rfl, rfl⟩
+end
+
+theorem M_dest_M_mk (x : P.apply (M P)) : M_dest (M_mk x) = x :=
+begin
+  have : M_mk ∘ M_dest = id := funext M_mk_M_dest,
+  rw [M_mk, M_dest_corec, ←comp_map, ←M_mk, this, id_map, id]
+end
+
+end pfunctor
+
+/-
+Construct the final coalebra to a qpf.
+-/
+
+namespace qpf
+variables {F : Type u → Type u} [functor F] [q : qpf F]
+include q
+
+/-- does recursion on `q.P.M` using `g : α → F α` rather than `g : α → P α` -/
+def corecF {α : Type*} (g : α → F α) : α → q.P.M :=
+pfunctor.M_corec (λ x, repr (g x))
+
+theorem corecF_eq {α : Type*} (g : α → F α) (x : α) :
+  pfunctor.M_dest (corecF g x) = corecF g <$> repr (g x) :=
+by rw [corecF, pfunctor.M_dest_corec]
+
+/- Equivalence -/
+
+/- A pre-congruence on q.P.M *viewed as an F-coalgebra*. Not necessarily symmetric. -/
+def is_precongr (r : q.P.M → q.P.M → Prop) : Prop :=
+  ∀ ⦃x y⦄, r x y →
+    abs (quot.mk r <$> pfunctor.M_dest x) = abs (quot.mk r <$> pfunctor.M_dest y)
+
+/- The maximal congruence on q.P.M -/
+def Mcongr : q.P.M → q.P.M → Prop :=
+λ x y, ∃ r, is_precongr r ∧ r x y
+
+def cofix (F : Type u → Type u) [functor F] [q : qpf F]:= quot (@Mcongr F _ q)
+
+def cofix.corec {α : Type*} (g : α → F α) : α → cofix F :=
+λ x, quot.mk  _ (corecF g x)
+
+def cofix.dest : cofix F → F (cofix F) :=
+quot.lift
+  (λ x, quot.mk Mcongr <$> (abs (pfunctor.M_dest x)))
+  begin
+    rintros x y ⟨r, pr, rxy⟩, dsimp,
+    have : ∀ x y, r x y → Mcongr x y,
+    { intros x y h, exact ⟨r, pr, h⟩ },
+    rw [←quot.factor_mk_eq _ _ this], dsimp,
+    conv { to_lhs, rw [comp_map, ←abs_map, pr rxy, abs_map, ←comp_map] }
+  end
+
+theorem cofix.dest_corec {α : Type u} (g : α → F α) (x : α) :
+  cofix.dest (cofix.corec g x) = cofix.corec g <$> g x :=
+begin
+  conv { to_lhs, rw [cofix.dest, cofix.corec] }, dsimp,
+  rw [corecF_eq, abs_map, abs_repr, ←comp_map], reflexivity
+end
+
+private theorem cofix.bisim_aux
+    (r : cofix F → cofix F → Prop)
+    (h' : ∀ x, r x x)
+    (h : ∀ x y, r x y → quot.mk r <$> cofix.dest x = quot.mk r <$> cofix.dest y) :
+  ∀ x y, r x y → x = y :=
+begin
+  intro x, apply quot.induction_on x, clear x,
+  intros x y, apply quot.induction_on y, clear y,
+  intros y rxy,
+  apply quot.sound,
+  let r' := λ x y, r (quot.mk _ x) (quot.mk _ y),
+  have : is_precongr r',
+  { intros a b r'ab,
+    have  h₀: quot.mk r <$> quot.mk Mcongr <$> abs (pfunctor.M_dest a) =
+              quot.mk r <$> quot.mk Mcongr <$> abs (pfunctor.M_dest b) := h _ _ r'ab,
+    have h₁ : ∀ u v : q.P.M, Mcongr u v → quot.mk r' u = quot.mk r' v,
+    { intros u v cuv, apply quot.sound, dsimp [r'], rw quot.sound cuv, apply h' },
+    let f : quot r → quot r' := quot.lift (quot.lift (quot.mk r') h₁)
+      begin
+        intro c, apply quot.induction_on c, clear c,
+        intros c d, apply quot.induction_on d, clear d,
+        intros d rcd, apply quot.sound, apply rcd
+      end,
+    have : f ∘ quot.mk r ∘ quot.mk Mcongr = quot.mk r' := rfl,
+    rw [←this, pfunctor.comp_map _ _ f, pfunctor.comp_map _ _ (quot.mk r),
+          abs_map, abs_map, abs_map, h₀],
+    rw [pfunctor.comp_map _ _ f, pfunctor.comp_map _ _ (quot.mk r),
+          abs_map, abs_map, abs_map] },
+  refine ⟨r', this, rxy⟩
+end
+
+theorem cofix.bisim
+    (r : cofix F → cofix F → Prop)
+    (h : ∀ x y, r x y → quot.mk r <$> cofix.dest x = quot.mk r <$> cofix.dest y) :
+  ∀ x y, r x y → x = y :=
+let r' x y := x = y ∨ r x y in
+begin
+  intros x y rxy,
+  apply cofix.bisim_aux r',
+  { intro x, left, reflexivity },
+  { intros x y r'xy,
+    cases r'xy, { rw r'xy },
+    have : ∀ x y, r x y → r' x y := λ x y h, or.inr h,
+    rw ←quot.factor_mk_eq _ _ this, dsimp,
+    rw [@comp_map _ _ q _ _ _ (quot.mk r), @comp_map _ _ q _ _ _ (quot.mk r)],
+    rw h _ _ r'xy },
+  right, exact rxy
+end
+
+/-
+TODO:
+- define other two versions of relation lifting (via subtypes, via P)
+- derive other bisimulation principles.
+- define mk and prove identities.
+-/
+
+end qpf
+
+/-
+Composition of qpfs.
+-/
+
+namespace pfunctor
+
+/-
+def comp : pfunctor.{u} → pfunctor.{u} → pfunctor.{u}
+| ⟨A₂, B₂⟩ ⟨A₁, B₁⟩ := ⟨Σ a₂ : A₂, B₂ a₂ → A₁, λ ⟨a₂, a₁⟩, Σ u : B₂ a₂, B₁ (a₁ u)⟩
+-/
+
+def comp (P₂ P₁ : pfunctor.{u}) : pfunctor.{u} :=
+⟨ Σ a₂ : P₂.1, P₂.2 a₂ → P₁.1,
+  λ a₂a₁, Σ u : P₂.2 a₂a₁.1, P₁.2 (a₂a₁.2 u) ⟩
+
+end pfunctor
+
+namespace qpf
+
+variables {F₂ : Type u → Type u} [functor F₂] [q₂ : qpf F₂]
+variables {F₁ : Type u → Type u} [functor F₁] [q₁ : qpf F₁]
+include q₂ q₁
+
+def comp : qpf (functor.comp F₂ F₁) :=
+{ P := pfunctor.comp (q₂.P) (q₁.P),
+  abs := λ α,
+    begin
+      dsimp [functor.comp],
+      intro p,
+      exact abs ⟨p.1.1, λ x, abs ⟨p.1.2 x, λ y, p.2 ⟨x, y⟩⟩⟩
+    end,
+  repr := λ α,
+    begin
+      dsimp [functor.comp],
+      intro y,
+      refine ⟨⟨(repr y).1, λ u, (repr ((repr y).2 u)).1⟩, _⟩,
+      dsimp [pfunctor.comp],
+      intro x,
+      exact (repr ((repr y).2 x.1)).snd x.2
+    end,
+  abs_repr := λ α,
+    begin
+      abstract {
+      dsimp [functor.comp],
+      intro x,
+      conv { to_rhs, rw ←abs_repr x},
+      cases h : repr x with a f,
+      dsimp,
+      congr,
+      ext x,
+      cases h' : repr (f x) with b g,
+      dsimp, rw [←h', abs_repr] }
+    end,
+  abs_map := λ α β f,
+    begin
+      abstract {
+      dsimp [functor.comp, pfunctor.comp],
+      intro p,
+      cases p with a g, dsimp,
+      cases a with b h, dsimp,
+      symmetry,
+      transitivity,
+      symmetry,
+      apply abs_map,
+      congr,
+      rw pfunctor.map_eq,
+      dsimp [function.comp],
+      simp [abs_map],
+      split,
+      reflexivity,
+      ext x,
+      rw ←abs_map,
+      reflexivity }
+    end
+}
+
+end qpf
+
+
+/-
+Quotients.
+
+We show that if `F` is a qpf and `G` is a suitable quotient of `F`, then `G` is a qpf.
+-/
+
+namespace qpf
+variables {F : Type u → Type u} [functor F] [q : qpf F]
+variables {G : Type u → Type u} [functor G]
+variable  {FG_abs  : Π {α}, F α → G α}
+variable  {FG_repr : Π {α}, G α → F α}
+
+def quotient_qpf
+    (FG_abs_repr : Π {α} (x : G α), FG_abs (FG_repr x) = x)
+    (FG_abs_map  : ∀ {α β} (f : α → β) (x : F α), FG_abs (f <$> x) = f <$> FG_abs x) :
+  qpf G :=
+{ P        := q.P,
+  abs      := λ {α} p, FG_abs (abs p),
+  repr     := λ {α} x, repr (FG_repr x),
+  abs_repr := λ {α} x, by rw [abs_repr, FG_abs_repr],
+  abs_map  := λ {α β} f x, by { rw [abs_map, FG_abs_map] } }
+
+end qpf
+
+#exit
+import group_theory.subgroup group_theory.perm
+
+universe u
+
+open finset equiv equiv.perm
+
+class simple_group {G : Type*} [group G] :=
+(simple : ∀ (H : set G) [normal_subgroup H], H = set.univ ∨ H = is_subgroup.trivial G)
+
+variables {G : Type*} [group G] [fintype G] [decidable_eq G]
+
+def conjugacy_class (a : G) : finset G :=
+(@univ G _).image (λ x, x * a * x⁻¹)
+
+@[simp] lemma mem_conjugacy_class {a b : G} : b ∈ conjugacy_class a ↔ is_conj a b :=
+by simp [conjugacy_class, mem_image, is_conj, eq_comm]
+
+def subgroup_closure (s : finset G) : finset G :=
+insert 1 ((s.product s).image (λ a, a.1 * a.2⁻¹))
+
+instance subgroup_closure.is_subgroup (s : finset G) :
+  is_subgroup (↑(subgroup_closure s) : set G) :=
+{ one_mem := by simp [subgroup_closure],
+  mul_mem := sorry,
+  inv_mem := sorry }
+
+def alternating (α : Type u) [fintype α] [decidable_eq α] : Type u :=
+is_group_hom.ker (sign : perm α → units ℤ)
+
+instance (α : Type u) [fintype α] [decidable_eq α] : group (alternating α) :=
+by unfold alternating; apply_instance
+
+instance (α : Type u) [fintype α] [decidable_eq α] :
+  fintype (alternating α) :=
+by simp [alternating, is_group_hom.ker];
+exact subtype.fintype _
+
+#eval conjugacy_class (show alternating (fin 5),
+  from ⟨swap 1 2 * swap 2 3, by simp [is_group_hom.ker]; refl⟩)
+
+
+
+#exit
+def next_aux (N : nat) : list nat -> nat
+| [] := 0
+| (hd :: tl) := if hd < N then 0 else next_aux tl + 1
+
+def next (m : nat) : list nat -> list nat
+| [] := []
+| (0 :: tl) := tl
+| ((n+1) :: tl) := let index := next_aux (n+1) tl,
+    B := n :: list.take index tl,
+    G := list.drop index tl in
+    ((++ B)^[m+1] B) ++ G
+
+-- Beklemishev's worms
+def worm_step (initial : nat) : Π step : nat, list nat
+| 0 := [initial]
+| (m+1) := next m (worm_step m)
+
+#eval (list.range 10).map (worm_step 3)
+
+-- It will terminate
+theorem worm_principle : ∀ n, ∃ s, worm_step n s = []
+| 0 := ⟨1, rfl⟩
+| (n+1) := begin
+
+
+end
+
+
+-- def Fin : nat → Type
+--   | 0 := empty
+--   | (n+1) := option (Fin n)
+
+inductive Fin : nat → Type
+| mk {n : ℕ} : option (Fin n) → Fin (n + 1)
+
+
+#exit
+
+import analysis.topology.continuity
+
+#print axioms continuous
+
+local attribute [instance] classical.prop_decidable
+
+import analysis.topology.continuity
+
+lemma continuous_of_const {α : Type*} {β : Type*} [topological_space α]
+  [topological_space β] {f : α → β} (h : ∀a b, f a = f b) : continuous f :=
+λ s hs, _
+
+#exit
+example {α : Type*} (r : α → α → Prop)
+  (h : ∀ f : ℕ → α, ∃ n, ¬r (f (n + 1)) (f n)) :
+  well_founded r :=
+let f : Π a : α, ¬ acc r a → {b : α // ¬ acc r b ∧ r b a} :=
+  λ a ha, classical.indefinite_description _
+    (classical.by_contradiction
+      (λ hc, ha $ acc.intro _ (λ y hy,
+        classical.by_contradiction (λ hy1, hc ⟨y, hy1, hy⟩)))) in
+well_founded.intro
+  (λ a, classical.by_contradiction
+    (λ ha, let g : Π n : ℕ, {b : α // ¬ acc r b} := λ n, nat.rec_on n ⟨a, ha⟩
+        (λ n b, ⟨f b.1 b.2, (f b.1 b.2).2.1⟩ ) in
+      have hg : ∀ n, r (g (n + 1)) (g n),
+        from λ n, nat.rec_on n (f _ _).2.2
+          (λ n hn, (f _ _).2.2),
+      exists.elim (h (subtype.val ∘ g)) (λ n hn, hn (hg _))))
+
+
+
+example {α : Type*} (r : α → α → Prop)
+  (h : well_founded r) (f : ℕ → α) :
+  ∃ n, ¬r (f (n + 1)) (f n) :=
+classical.by_contradiction (λ hr,
+  @well_founded.fix α (λ a, ∀ n, a ≠ f n) r h
+  (λ a ih n hn, ih (f (n + 1)) (classical.by_contradiction (hn.symm ▸ λ h, hr ⟨_, h⟩)) (n + 1) rfl)
+  (f 0) 0 rfl )
+
+lemma well_founded_iff_descending_chain {α : Type*} (r : α → α → Prop) :
+  well_founded r ↔ ∀ f : ℕ → α, ∃ n, ¬ r (f (n + 1)) (f n) :=
+⟨λ h f, classical.by_contradiction (λ hr,
+    @well_founded.fix α (λ a, ∀ n, a ≠ f n) r h
+      (λ a ih n hn, ih (f (n + 1))
+        (classical.by_contradiction (hn.symm ▸ λ h, hr ⟨_, h⟩)) (n + 1) rfl)
+      (f 0) 0 rfl),
+  λ h, let f : Π a : α, ¬ acc r a → {b : α // ¬ acc r b ∧ r b a} :=
+      λ a ha, classical.indefinite_description _
+        (classical.by_contradiction
+          (λ hc, ha $ acc.intro _ (λ y hy,
+            classical.by_contradiction (λ hy1, hc ⟨y, hy1, hy⟩)))) in
+    well_founded.intro
+      (λ a, classical.by_contradiction
+        (λ ha,
+          let g : Π n : ℕ, {b : α // ¬ acc r b} :=
+            λ n, nat.rec_on n ⟨a, ha⟩
+              (λ n b, ⟨f b.1 b.2, (f b.1 b.2).2.1⟩) in
+          have hg : ∀ n, r (g (n + 1)) (g n),
+            from λ n, nat.rec_on n (f _ _).2.2
+              (λ n hn, (f _ _).2.2),
+          exists.elim (h (subtype.val ∘ g)) (λ n hn, hn (hg _))))⟩
+
+#exit
+import data.set.lattice order.order_iso data.quot
+
+universes u v
+
+noncomputable theory
+
+axiom choice2_aux {α : Sort u} : { choice : α → α // ∀ (a b : α), choice a = choice b }
+
+def choice2 : Π {α : Sort u}, α → α := λ _, choice2_aux.1
+
+lemma choice2_spec : ∀ {α : Sort u} (a b : α), choice2 a = choice2 b := λ _, choice2_aux.2
+
+axiom univalence : ∀ {α β : Sort u}, α ≃ β → α = β
+
+lemma trunc.out2 {α : Sort u} (a : trunc α) : α := trunc.lift_on a choice2 choice2_spec
+
+section diaconescu
+variable p : Sort u
+include p
+
+private def U (x : Sort u) := trunc (psum (trunc x) p)
+private def V (x : Sort u) := trunc (psum (x → false) p)
+
+private lemma exU : trunc (Σ' x : Sort u, U p x) :=
+  trunc.mk ⟨punit, trunc.mk (psum.inl (trunc.mk punit.star))⟩
+private lemma exV : trunc (Σ' x : Sort u, V p x) :=
+  trunc.mk ⟨pempty, trunc.mk (psum.inl (λ h, pempty.rec_on _ h))⟩
+
+/- TODO(Leo): check why the code generator is not ignoring (some exU)
+   when we mark u as def. -/
+private def u : Sort u := psigma.fst (choice2 (trunc.out2 (exU p)))
+
+private def v : Sort u := psigma.fst (choice2 (trunc.out2 (exV p)))
+
+set_option type_context.unfold_lemmas true
+private lemma u_def : U p (u p) := psigma.snd (choice2 (trunc.out2 (exU p)))
+private lemma v_def : V p (v p) := psigma.snd (choice2 (trunc.out2 (exV p)))
+
+private lemma not_uv_or_p : psum ((u p) ≠ (v p)) p :=
+psum.cases_on (trunc.out2 (u_def p))
+  (assume hut : trunc (u p),
+    psum.cases_on (trunc.out2 (v_def p))
+      (assume hvf : v p → false,
+        psum.inl (λ h, hvf (eq.rec_on h (trunc.out2 hut))))
+      psum.inr)
+  psum.inr
+
+private lemma p_implies_uv (hp : p) : u p = v p :=
+have hpred : U p = V p, from
+  funext (assume x : Sort u,
+    univalence
+      { to_fun := λ _, trunc.mk (psum.inr hp),
+        inv_fun := λ _, trunc.mk (psum.inr hp),
+        left_inv := λ x, show trunc.mk _ = _, from subsingleton.elim _ _,
+        right_inv := λ x, show trunc.mk _ = _, from subsingleton.elim _ _ }),
+show (choice2 (trunc.out2 (exU p))).fst = (choice2 (trunc.out2 (exV p))).fst,
+  from @eq.drec_on _ (U p)
+    (λ α (h : (U p) = α),
+      (choice2 (trunc.out2 (exU p))).fst =
+      (@choice2 (Σ' x : Sort u, α x) (trunc.out2
+        (eq.rec_on (show V p = α, from hpred.symm.trans h) (exV p)))).fst)
+    (V p) hpred (by congr)
+
+#print axioms p_implies_uv
+
+theorem em : psum p (p → false) :=
+psum.rec_on (not_uv_or_p p)
+  (assume hne : u p ≠ v p, psum.inr (λ hp, hne (p_implies_uv p hp)))
+  psum.inl
+
+end diaconescu
+
+def old_choice {α : Sort u} : nonempty α → α :=
+psum.rec_on (em α) (λ a _, a)
+  (function.swap (((∘) ∘ (∘)) false.elim nonempty.elim))
+#print axioms old_choice
+open tactic declaration
+
+#eval do d ← get_decl `old_choice,
+  match d with
+  | defn _ _ _ v _ _ := do e ← tactic.whnf v
+      tactic.transparency.all tt, trace e, skip
+  | _ := skip
+  end
+
+#exit
+open set
+section chain
+parameters {α : Type u} (r : α → α → Prop)
+local infix ` ≺ `:50  := r
+
+/-- A chain is a subset `c` satisfying
+  `x ≺ y ∨ x = y ∨ y ≺ x` for all `x y ∈ c`. -/
+def chain (c : set α) := pairwise_on c (λx y, x ≺ y ∨ y ≺ x)
+parameters {r}
+
+theorem chain.total_of_refl [is_refl α r]
+  {c} (H : chain c) {x y} (hx : x ∈ c) (hy : y ∈ c) :
+  x ≺ y ∨ y ≺ x :=
+if e : x = y then or.inl (e ▸ refl _) else H _ hx _ hy e
+
+theorem chain.directed [is_refl α r]
+  {c} (H : chain c) {x y} (hx : x ∈ c) (hy : y ∈ c) :
+  ∃ z, z ∈ c ∧ x ≺ z ∧ y ≺ z :=
+match H.total_of_refl hx hy with
+| or.inl h := ⟨y, hy, h, refl _⟩
+| or.inr h := ⟨x, hx, refl _, h⟩
+end
+
+theorem chain.mono {c c'} : c' ⊆ c → chain c → chain c' :=
+pairwise_on.mono
+
+theorem chain.directed_on [is_refl α r] {c} (H : chain c) : directed_on (≺) c :=
+λ x xc y yc, let ⟨z, hz, h⟩ := H.directed xc yc in ⟨z, hz, h⟩
+
+theorem chain_insert {c : set α} {a : α} (hc : chain c) (ha : ∀b∈c, b ≠ a → a ≺ b ∨ b ≺ a) :
+  chain (insert a c) :=
+forall_insert_of_forall
+  (assume x hx, forall_insert_of_forall (hc x hx) (assume hneq, (ha x hx hneq).symm))
+  (forall_insert_of_forall (assume x hx hneq, ha x hx $ assume h', hneq h'.symm) (assume h, (h rfl).rec _))
+
+def super_chain (c₁ c₂ : set α) := chain c₂ ∧ c₁ ⊂ c₂
+
+def is_max_chain (c : set α) := chain c ∧ ¬ (∃c', super_chain c c')
+
+def succ_chain (c : set α) : set α :=
+psum.rec_on (em2 {c' : set α // chain c ∧ super_chain c c'}) subtype.val (λ _, c)
+
+theorem succ_spec {c : set α} (h : {c' // chain c ∧ super_chain c c'}) :
+  super_chain c (succ_chain c) :=
+let ⟨c', hc'⟩ := h in
+have chain c ∧ super_chain c (some h),
+  from @some_spec _ (λc', chain c ∧ super_chain c c') _,
+by simp [succ_chain, dif_pos, h, this.right]
+
+theorem chain_succ {c : set α} (hc : chain c) : chain (succ_chain c) :=
+if h : ∃c', chain c ∧ super_chain c c' then
+  (succ_spec h).left
+else
+  by simp [succ_chain, dif_neg, h]; exact hc
+
+theorem super_of_not_max {c : set α} (hc₁ : chain c) (hc₂ : ¬ is_max_chain c) :
+  super_chain c (succ_chain c) :=
+begin
+  simp [is_max_chain, not_and_distrib, not_forall_not] at hc₂,
+  cases hc₂.neg_resolve_left hc₁ with c' hc',
+  exact succ_spec ⟨c', hc₁, hc'⟩
+end
+
+theorem succ_increasing {c : set α} : c ⊆ succ_chain c :=
+if h : ∃c', chain c ∧ super_chain c c' then
+  have super_chain c (succ_chain c), from succ_spec h,
+  this.right.left
+else by simp [succ_chain, dif_neg, h, subset.refl]
+
+inductive chain_closure : set α → Prop
+| succ : ∀{s}, chain_closure s → chain_closure (succ_chain s)
+| union : ∀{s}, (∀a∈s, chain_closure a) → chain_closure (⋃₀ s)
+
+theorem chain_closure_empty : chain_closure ∅ :=
+have chain_closure (⋃₀ ∅),
+  from chain_closure.union $ assume a h, h.rec _,
+by simp at this; assumption
+
+theorem chain_closure_closure : chain_closure (⋃₀ chain_closure) :=
+chain_closure.union $ assume s hs, hs
+
+variables {c c₁ c₂ c₃ : set α}
+
+private lemma chain_closure_succ_total_aux (hc₁ : chain_closure c₁) (hc₂ : chain_closure c₂)
+  (h : ∀{c₃}, chain_closure c₃ → c₃ ⊆ c₂ → c₂ = c₃ ∨ succ_chain c₃ ⊆ c₂) :
+  c₁ ⊆ c₂ ∨ succ_chain c₂ ⊆ c₁ :=
+begin
+  induction hc₁,
+  case _root_.zorn.chain_closure.succ : c₃ hc₃ ih {
+    cases ih with ih ih,
+    { have h := h hc₃ ih,
+      cases h with h h,
+      { exact or.inr (h ▸ subset.refl _) },
+      { exact or.inl h } },
+    { exact or.inr (subset.trans ih succ_increasing) } },
+  case _root_.zorn.chain_closure.union : s hs ih {
+    refine (classical.or_iff_not_imp_right.2 $ λ hn, sUnion_subset $ λ a ha, _),
+    apply (ih a ha).resolve_right,
+    apply mt (λ h, _) hn,
+    exact subset.trans h (subset_sUnion_of_mem ha) }
+end
+
+private lemma chain_closure_succ_total (hc₁ : chain_closure c₁) (hc₂ : chain_closure c₂) (h : c₁ ⊆ c₂) :
+  c₂ = c₁ ∨ succ_chain c₁ ⊆ c₂ :=
+begin
+  induction hc₂ generalizing c₁ hc₁ h,
+  case _root_.zorn.chain_closure.succ : c₂ hc₂ ih {
+    have h₁ : c₁ ⊆ c₂ ∨ @succ_chain α r c₂ ⊆ c₁ :=
+      (chain_closure_succ_total_aux hc₁ hc₂ $ assume c₁, ih),
+    cases h₁ with h₁ h₁,
+    { have h₂ := ih hc₁ h₁,
+      cases h₂ with h₂ h₂,
+      { exact (or.inr $ h₂ ▸ subset.refl _) },
+      { exact (or.inr $ subset.trans h₂ succ_increasing) } },
+    { exact (or.inl $ subset.antisymm h₁ h) } },
+  case _root_.zorn.chain_closure.union : s hs ih {
+    apply or.imp_left (assume h', subset.antisymm h' h),
+    apply classical.by_contradiction,
+    simp [not_or_distrib, sUnion_subset_iff, classical.not_forall],
+    intros c₃ hc₃ h₁ h₂,
+    have h := chain_closure_succ_total_aux hc₁ (hs c₃ hc₃) (assume c₄, ih _ hc₃),
+    cases h with h h,
+    { have h' := ih c₃ hc₃ hc₁ h,
+      cases h' with h' h',
+      { exact (h₁ $ h' ▸ subset.refl _) },
+      { exact (h₂ $ subset.trans h' $ subset_sUnion_of_mem hc₃) } },
+    { exact (h₁ $ subset.trans succ_increasing h) } }
+end
+
+theorem chain_closure_total (hc₁ : chain_closure c₁) (hc₂ : chain_closure c₂) : c₁ ⊆ c₂ ∨ c₂ ⊆ c₁ :=
+have c₁ ⊆ c₂ ∨ succ_chain c₂ ⊆ c₁,
+  from chain_closure_succ_total_aux hc₁ hc₂ $ assume c₃ hc₃, chain_closure_succ_total hc₃ hc₂,
+or.imp_right (assume : succ_chain c₂ ⊆ c₁, subset.trans succ_increasing this) this
+
+theorem chain_closure_succ_fixpoint (hc₁ : chain_closure c₁) (hc₂ : chain_closure c₂)
+  (h_eq : succ_chain c₂ = c₂) : c₁ ⊆ c₂ :=
+begin
+  induction hc₁,
+  case _root_.zorn.chain_closure.succ : c₁ hc₁ h {
+    exact or.elim (chain_closure_succ_total hc₁ hc₂ h)
+      (assume h, h ▸ h_eq.symm ▸ subset.refl c₂) id },
+  case _root_.zorn.chain_closure.union : s hs ih {
+    exact (sUnion_subset $ assume c₁ hc₁, ih c₁ hc₁) }
+end
+
+theorem chain_closure_succ_fixpoint_iff (hc : chain_closure c) :
+  succ_chain c = c ↔ c = ⋃₀ chain_closure :=
+⟨assume h, subset.antisymm
+    (subset_sUnion_of_mem hc)
+    (chain_closure_succ_fixpoint chain_closure_closure hc h),
+  assume : c = ⋃₀{c : set α | chain_closure c},
+  subset.antisymm
+    (calc succ_chain c ⊆ ⋃₀{c : set α | chain_closure c} :
+        subset_sUnion_of_mem $ chain_closure.succ hc
+      ... = c : this.symm)
+    succ_increasing⟩
+
+theorem chain_chain_closure (hc : chain_closure c) : chain c :=
+begin
+  induction hc,
+  case _root_.zorn.chain_closure.succ : c hc h {
+    exact chain_succ h },
+  case _root_.zorn.chain_closure.union : s hs h {
+    have h : ∀c∈s, zorn.chain c := h,
+    exact assume c₁ ⟨t₁, ht₁, (hc₁ : c₁ ∈ t₁)⟩ c₂ ⟨t₂, ht₂, (hc₂ : c₂ ∈ t₂)⟩ hneq,
+      have t₁ ⊆ t₂ ∨ t₂ ⊆ t₁, from chain_closure_total (hs _ ht₁) (hs _ ht₂),
+      or.elim this
+        (assume : t₁ ⊆ t₂, h t₂ ht₂ c₁ (this hc₁) c₂ hc₂ hneq)
+        (assume : t₂ ⊆ t₁, h t₁ ht₁ c₁ hc₁ c₂ (this hc₂) hneq) }
+end
+
+def max_chain := ⋃₀ chain_closure
+
+/-- Hausdorff's maximality principle
+
+There exists a maximal totally ordered subset of `α`.
+Note that we do not require `α` to be partially ordered by `r`. -/
+theorem max_chain_spec : is_max_chain max_chain :=
+classical.by_contradiction $
+assume : ¬ is_max_chain (⋃₀ chain_closure),
+have super_chain (⋃₀ chain_closure) (succ_chain (⋃₀ chain_closure)),
+  from super_of_not_max (chain_chain_closure chain_closure_closure) this,
+let ⟨h₁, h₂, (h₃ : (⋃₀ chain_closure) ≠ succ_chain (⋃₀ chain_closure))⟩ := this in
+have succ_chain (⋃₀ chain_closure) = (⋃₀ chain_closure),
+  from (chain_closure_succ_fixpoint_iff chain_closure_closure).mpr rfl,
+h₃ this.symm
+
+/-- Zorn's lemma
+
+If every chain has an upper bound, then there is a maximal element -/
+theorem zorn (h : ∀c, chain c → ∃ub, ∀a∈c, a ≺ ub) (trans : ∀{a b c}, a ≺ b → b ≺ c → a ≺ c) :
+  ∃m, ∀a, m ≺ a → a ≺ m :=
+have ∃ub, ∀a∈max_chain, a ≺ ub,
+  from h _ $ max_chain_spec.left,
+let ⟨ub, (hub : ∀a∈max_chain, a ≺ ub)⟩ := this in
+⟨ub, assume a ha,
+  have chain (insert a max_chain),
+    from chain_insert max_chain_spec.left $ assume b hb _, or.inr $ trans (hub b hb) ha,
+  have a ∈ max_chain, from
+    classical.by_contradiction $ assume h : a ∉ max_chain,
+    max_chain_spec.right $ ⟨insert a max_chain, this, ssubset_insert h⟩,
+  hub a this⟩
+end
+
+#exit
+import analysis.exponential group_theory.quotient_group
+
+axiom R_iso_C : {f : ℝ ≃ ℂ // is_add_group_hom f}
+
+open quotient_group
+
+def R_mod_Z_iso_units_C : quotient_add_group.quotient (gmultiples (1 : ℝ))
+  ≃ units ℂ :=
+calc units ℂ ≃
+
+#exit
+import data.real.basic tactic.norm_num
+#print expr
+--set_option pp.all true
+lemma crazy (k l : ℕ) (h : l ≤ k): ((2:real)⁻¹)^k ≤ (2⁻¹)^l :=
+begin
+  apply pow_le_pow_of_le_one _ _ h,
+  norm_num,
+  norm_num1, norm_num1, simp,
+  show (2 : ℝ)⁻¹ ≤ 1,
+  norm_num1,
+
+end
+
+example {α : Type*} (h : α ≃ unit → false) {x : α} : α
+
+import tactic.norm_num
+
+set_option profiler true
+
+lemma facebook_puzzle :
+  let a := 154476802108746166441951315019919837485664325669565431700026634898253202035277999 in
+  let b := 36875131794129999827197811565225474825492979968971970996283137471637224634055579 in
+  let c := 4373612677928697257861252602371390152816537558161613618621437993378423467772036 in
+  (a : ℚ) / (b + c) + b / (a + c) + c / (a + b) = 4 := by norm_num
+
+#print facebook_puzzle
+#print axioms facebook_puzzle
+
+#exit
+import data.complex.basic
+
+lemma
+
+import data.quot
+
+section
+
+variables {α : Sort*} {β : α → Sort*} {γ : Sort*} [s : ∀ a : α, setoid (β a)]
+include s
+
+instance pi.setoid : setoid (Π a : α, β a) :=
+{ r := λ x y, ∀ a : α, x a ≈ y a,
+  iseqv := ⟨λ x a, setoid.refl _,
+    λ x y h a, setoid.symm (h a),
+    λ x y z hxy hyz a, setoid.trans (hxy a) (hyz a)⟩ }
+
+meta def setoid_to_setoid (x : Π a : α, quotient (s a)) :
+  quotient (@pi.setoid α β _) :=
+quotient.mk (λ a, quot.unquot (x a))
+
+axiom quotient.lift_onₙ (x : Π a : α, quotient (s a))
+  (f : (Π a : α, β a) → γ) (h : ∀ x₁ x₂ : Π a, β a,
+  (∀ a, x₁ a ≈ x₂ a) → f x₁ = f x₂) : γ
+end
+
+#print classical.axiom_of_choice
+
+lemma choice {α : Sort*} {β : α → Sort*} {r : Π (x : α), β x → Prop}
+  (h : ∀ (x : α), ∃ (y : β x), r x y) :
+    ∃ (f : Π (x : α), β x), ∀ (x : α), r x (f x) :=
+begin
+
+end
+lemma quotient.lift_on
+
+#exit
+import tactic.ring data.complex.basic
+
+lemma h (x : ℝ) : x / 3 + x / -2 = x / 6 := by ring
+set_option pp.all true
+#print h
+
+example (x : ℂ) : x / 3 + x / 2 = 5 * x / 6 := by ring
+
+#exit
+import tactic.interactive
+
+
+-- private meta def collect_proofs_in :
+--   expr → list expr → list name × list expr → tactic (list name × list expr)
+-- | e ctx (ns, hs) :=
+-- let go (tac : list name × list expr → tactic (list name × list expr)) :
+--   tactic (list name × list expr) :=
+-- (do t ← infer_type e,
+--    mcond (is_prop t) (do
+--      first (hs.map $ λ h, do
+--        t' ← infer_type h,
+--        is_def_eq t t',
+--        g ← target,
+--        change $ g.replace (λ a n, if a = e then some h else none),
+--        return (ns, hs)) <|>
+--      (let (n, ns) := (match ns with
+--         | [] := (`_x, [])
+--         | (n :: ns) := (n, ns)
+--         end : name × list name) in
+--       do generalize e n,
+--          h ← intro n,
+--          return (ns, h::hs)) <|> return (ns, hs)) (tac (ns, hs))) <|> return ([], []) in
+-- match e with
+-- | (expr.const _ _)   := go return
+-- | (expr.local_const _ _ _ t) := collect_proofs_in t ctx (ns, hs)
+-- | (expr.mvar _ _ t)  := collect_proofs_in t ctx (ns, hs)
+-- | (expr.app f x)     :=
+--   go (λ nh, collect_proofs_in f ctx nh >>= collect_proofs_in x ctx)
+-- | (expr.lam n b d e) :=
+--   go (λ nh, do
+--     nh ← collect_proofs_in d ctx nh,
+--     var ← mk_local' n b d,
+--     collect_proofs_in (expr.instantiate_var e var) (var::ctx) nh)
+-- | (expr.pi n b d e) := do
+--   nh ← collect_proofs_in d ctx (ns, hs),
+--   var ← mk_local' n b d,
+--   collect_proofs_in (expr.instantiate_var e var) (var::ctx) nh
+-- | (expr.elet n t d e) :=
+--   go (λ nh, do
+--     nh ← collect_proofs_in t ctx nh,
+--     nh ← collect_proofs_in d ctx nh,
+--     collect_proofs_in (expr.instantiate_var e d) ctx nh)
+-- | (expr.macro m l) :=
+--   go (λ nh, mfoldl (λ x e, collect_proofs_in e ctx x) nh l)
+-- | _                  := return (ns, hs)
+-- end
+
+example {α : Type*} [ring α] (f : Π a : α, a ≠ 0 → α) (a b : α) (hb : b ≠ a) :
+  f (b - a) (mt sub_eq_zero_iff_eq.1 hb) = 0 :=
+begin
+  generalize_proofs,
+
+end
+
+example {α : Type*} [ring α] (f : Π a : α, a ≠ 0 → α) (b : α ) (hb : b ≠ 0) :
+  f b hb = 0 :=
+begin
+  generalize_proofs,
+
+end
+
+#exit
+import data.set.basic data.set.lattice
+import data.equiv.basic
+
+structure partition (α : Type) :=
+(C : set (set α))
+(non_empty : ∀ c ∈ C, ∃ a : α, a ∈ c)
+(disjoint : ∀ c d ∈ C, (∃ x, x ∈ c ∩ d) → c = d)
+(all : ⋃₀ C = set.univ)
+
+variable {α : Type}
+
+definition partitions_equiv_relns :
+{r : α → α → Prop | equivalence r} ≃ partition α :=
+{ to_fun := λ r, ⟨⋃ a : α, {{b : α | r.1 a b}},
+    λ c ⟨s, ⟨a, ha⟩, m⟩, ⟨a,
+      by simp only [ha.symm, set.mem_singleton_iff] at m;
+        rw m; exact r.2.1 a⟩,
+    λ u v ⟨s, ⟨a, ha⟩, m⟩ ⟨t, ⟨b, hb⟩, n⟩ ⟨c, hc⟩, begin
+      clear _fun_match _x _fun_match _x _fun_match _x,
+      simp [hb.symm, ha.symm] at *,
+      simp [m, n] at *,
+      have := r.2.2.2 hc.1 (r.2.2.1 hc.2),
+      exact set.ext (λ x, ⟨r.2.2.2 (r.2.2.1 this), r.2.2.2 this⟩),
+    end,
+    set.eq_univ_of_forall $ λ a, ⟨{b : α | r.val a b}, set.mem_Union.2 ⟨a, by simp⟩, r.2.1 a⟩⟩,
+  inv_fun := λ p, ⟨λ a b, ∃ s ∈ p.1, a ∈ s ∧ b ∈ s,
+    ⟨λ a, let ⟨s, hs⟩ := set.eq_univ_iff_forall.1 p.4 a in
+      ⟨s, by tauto⟩,
+    λ a b, by simp only [and.comm, imp_self],
+    λ a b c ⟨s, hs₁, hs₂⟩ ⟨t, ht₁, ht₂⟩,
+      ⟨s, hs₁, hs₂.1, have t = s, from p.3 _ _ ht₁ hs₁ ⟨b, ht₂.1, hs₂.2⟩, this ▸ ht₂.2⟩⟩⟩,
+  left_inv := λ ⟨r, hr⟩, subtype.eq begin
+        ext x y,
+        exact ⟨λ ⟨s, ⟨a, ⟨b, hb⟩, m⟩, t, ht⟩, begin simp [hb.symm] at *, simp [m] at *,
+          exact hr.2.2 (hr.2.1 t) ht, end,
+      λ h, ⟨{b : α | r x b}, set.mem_Union.2 ⟨x, by simp⟩,
+        by simp [*, hr.1 x] at *⟩⟩
+    end,
+  right_inv := λ ⟨C, hc₁, hc₂, hc₃⟩, partition.mk.inj_eq.mpr $
+    set.ext $ λ s, begin
+
+    end }
+
+
+#exit
+import analysis.topology.topological_space
+
+open filter
+
+variables {α : Type*} [topological_space α]
+
+def X : filter α := generate {s | compact (-s)}
+
+lemma tendsto_X_right {α β : Type*} [topological_space β] (f : filter α) (m : α → β) :
+  tendsto m f X ↔ ∀ s, compact (-s) → m ⁻¹' s ∈ f.sets :=
+by simp [X, tendsto, sets_iff_generate, map, set.subset_def]
+
+lemma mem_generate_iff {s : set (set α)} (hs : ∀ u v, u ∈ s → v ∈ s → u ∩ v ∈ s) {t : set α} :
+  t ∈ (generate s).sets ↔ ∃ u ∈ s, s ⊆ u :=
+begin
+
+
+end
+
+lemma tendsto_X_left {α β : Type*} [topological_space α]
+  [topological_space β] (m : α → β) : tendsto m X X :=
+begin
+  rw [tendsto_X_right, X],
+
+end
+
+#exit
+
+instance : preorder ℂ :=
+{ le := λ x y, x.abs ≤ y.abs,
+  le_refl := λ x, le_refl x.abs,
+  le_trans := λ x y z, @le_trans ℝ _ _ _ _ }
+#print filter
+example (f : ℂ → ℂ) : tendsto f at_top at_top ↔
+  ∀ x : ℝ, ∃ r, ∀ z : ℂ, r < z.abs → x < (f z).abs
+
+#exit
+import data.zmod.basic
+
+def dihedral (n : ℕ+) := units ℤ × zmod n
+
+variable (n : ℕ+)
+
+def mul : Π (x y : dihedral n), dihedral n
+| ⟨ff, x⟩ ⟨ff, y⟩ :=
+
+
+#exit
+import tactic.interactive -- to get simpa
+
+namespace random
+
+open nat
+set_option trace.simplify.rewrite true
+@[semireducible] theorem add_right_cancel (n m k : nat) : n + k = m + k → n = m :=
+begin
+  induction k with k ih,
+  { -- base case
+    exact id, -- n = n + 0 is true by definition
+  },
+  { -- inductive step
+    show succ (n + k) = succ (m + k) → _, -- again true by definition
+    intro H,
+    apply ih,
+    injection H,
+  }
+end
+#print axioms add_right_cancel
+
+end random
+
+#exit
+universe u
+
+@[derive decidable_eq] inductive poly_aux : Type
+| zero : poly_aux
+| X : poly_aux
+| C : poly_aux
+
+inductive polynomial_aux {α : Type u} [comm_semiring α] : poly_aux → Type u
+| zero : polynomial_aux poly_aux.zero
+| X : polynomial_aux poly_aux.X ⊕ polynomial_aux poly_aux.C → polynomial_aux poly_aux.X
+| C {a : α} (h : a ≠ 0) : polynomial_aux poly_aux.zero ⊕ polynomial_aux poly_aux.X →
+  polynomial_aux poly_aux.C
+
+#exit
 import analysis.metric_space
 
 open set

@@ -1,21 +1,32 @@
-import data.list.sort data.string data.zmod.quadratic_reciprocity
-#print name.mk_string
-meta def list_constant (e : expr) : list name :=
-e.fold [] $ λ e _ cs,
-let n := e.const_name in
-if e.is_constant ∧ n ∉ cs
-then n :: cs
-else cs
+import group_theory.alternating
 
 open declaration tactic
+
+meta def list_constant (e : expr) : tactic (list name) :=
+e.fold (return []) $ λ e _ cs,
+do env ← get_env,
+cs ← cs,
+let n := e.const_name in
+match (@option.none ℕ) with
+| none := if e.is_constant ∧ n ∉ cs
+then return (n :: cs)
+else return cs
+| _ := return cs
+end
 
 meta def const_in_def (n : name) : tactic (list name) :=
 do d ← get_decl n,
 match d with
-| thm _ _ t v      := return (list_constant v.get ∪ list_constant t)
-| defn _ _ t v _ _ := return (list_constant v ∪ list_constant t)
-| cnst _ _ t _     := return (list_constant t)
-| ax _ _ t         := return (list_constant t)
+| thm _ _ t v      :=
+   do lv ← list_constant v.get,
+  lt ← list_constant t,
+  return (lv ∪ lt)
+| defn _ _ t v _ _ :=
+  do lv ← list_constant v,
+  lt ← list_constant t,
+  return (lv ∪ lt)
+| cnst _ _ t _     := list_constant t
+| ax _ _ t         := list_constant t
 end
 
 meta def const_in_def_trans_aux₁ : list name × list (name × list name) →
@@ -35,13 +46,13 @@ let l2 := l₁ ∪ l₂,
 const_in_def_trans_aux₂ (l'.join.erase_dup.diff l2, l2)
 
 meta def const_in_def_trans (n : name) : tactic unit :=
-do l ← const_in_def_trans_aux₁ ([n], []),
+do l ← const_in_def_trans_aux₂ ([n], []),
 trace l.2.length,
 trace (list.insertion_sort (≤) (l.2.map to_string)),
 return ()
-#print acc.drec
-#eval const_in_def_trans `zmodp.quadratic_reciprocity
 
+#eval const_in_def_trans `simple_group_A5
+#print environment.is_projection
 -- #eval const_in_def_trans `zmodp.is_square_iff_is_square_of_mod_four_eq_one
 
 meta def list_all_consts : tactic (list name) :=
@@ -61,7 +72,7 @@ trace m.length,
 trace m,
 return ()
 
-#eval (name.get_prefix `nat.mod_add_div).to_string
+#eval (name.get_prefix `nat.prime.mod_add_div).to_string
 
 #eval (name.get_prefix (`nat.mod_add_div) = `polynomial : bool)
 
