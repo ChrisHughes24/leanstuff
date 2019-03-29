@@ -21,21 +21,6 @@ instance : preorder (Σ s : set (big_type K), discrete_field s) :=
     ⟨set.subset.trans hst htu,
       by resetI; convert @is_ring_hom.comp s t _ _ _ hst' u _ _ htu'⟩ }
 
--- lemma discrete_field.ext {α : Type*} (a b : discrete_field α)
---   (h : @is_field_hom α α (by haveI := a; apply_instance) (by haveI := b; apply_instance) id) :
---   a = b :=
--- begin
---   have h₁ := @is_ring_hom.map_add  α α (id _) (id _) id h,
---   have h₂ := @is_ring_hom.map_zero α α (id _) (id _) id h,
---   have h₃ := @is_ring_hom.map_neg  α α (id _) (id _) id h,
---   have h₄ := @is_ring_hom.map_mul  α α (id _) (id _) id h,
---   have h₅ := @is_ring_hom.map_one  α α (id _) (id _) id h,
---   have h₆ := @is_field_hom.map_inv α α (id _) (id _) id h,
---   resetI, cases a, cases b,
---   congr; funext,
---   exact h₁, exact h₂, exact h₃, exact h₄, exact h₅, exact h₆
--- end
-
 inductive in_algebraic_closure {L : Type v} [discrete_field L] (i : K → L) : L → Prop
 | of_field : ∀ x, in_algebraic_closure (i x)
 | root     : ∀ (l : L) (f : polynomial L), f ≠ 0 → (∀ n : ℕ, in_algebraic_closure (f.coeff n)) →
@@ -79,11 +64,7 @@ def embedding : K ↪ big_type K :=
 ⟨λ x, ({big_type_aux.of_field x} : set (big_type_aux K)), λ _ _, by simp⟩
 
 noncomputable instance : discrete_field (set.range (embedding K)) :=
-equiv.discrete_field (show K ≃ set.range (embedding K),
-  from equiv.of_bijective
-    (show function.bijective (λ k : K, (⟨embedding K k, k, rfl⟩ : set.range (embedding K))),
-      from ⟨λ x y hxy, (embedding K).2 (subtype.mk.inj hxy),
-        λ ⟨_, k, hk⟩, ⟨k, subtype.eq hk⟩⟩)).symm
+equiv.discrete_field (equiv.set.range _ (embedding K).2).symm
 
 def extensions : Type u :=
 {s : Σ s : set (big_type K), discrete_field s //
@@ -97,78 +78,20 @@ instance extensions.field (L : extensions K) :
 instance : has_coe (extensions K) (Σ s : set (big_type K), discrete_field s) :=
 ⟨subtype.val⟩
 
-lemma exists_max_of_chain {c : set (extensions K)}
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a.1) c)
-  (x y : ↥⋃ (s : c), s.1.1.1) :
-  ∃ L : extensions K, L ∈ c ∧
-  ↑x ∈ (L : Σ s : set (big_type K), discrete_field s).1 ∧
-  ↑y ∈ (L : Σ s : set (big_type K), discrete_field s).1 :=
-let ⟨u, ⟨sx, hsx⟩, hu⟩ := x.2 in
-let ⟨v, ⟨sy, hsy⟩, hv⟩ := y.2 in
-by simp only [hsx.symm, hsy.symm] at *; exact
-((@or_iff_not_imp_left _ _ (classical.dec _)).2 (hc sx sx.2 sy sy.2)).elim
-  (λ h, ⟨sx, sx.2, hu, h.symm ▸ hv⟩)
-  (λ h, h.elim
-    (λ ⟨h₁, h₂⟩, by exact ⟨sy, sy.2, h₁ hu, hv⟩)
-    (λ ⟨h₁, h₂⟩, ⟨sx, sx.2, hu, h₁ hv⟩))
+instance : preorder (extensions K) :=
+{ le := λ x y, x.1 ≤ y.1,
+  le_refl := λ _, le_refl _,
+  le_trans := λ _ _ _, le_trans }
 
-noncomputable def max_of_chain {c : set (extensions K)}
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a.1) c)
-  (x y : ↥⋃ (s : c), s.1.1.1) : extensions K :=
-classical.some (exists_max_of_chain K hc x y)
-
-lemma mem_max_of_chain {c : set (extensions K)}
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a.1) c)
-  (x y : ↥⋃ (s : c), s.1.1.1) :
-  ↑x ∈ (↑(max_of_chain K hc x y) : Σ s : set (big_type K), discrete_field s).1 ∧
-  ↑y ∈ (↑(max_of_chain K hc x y) : Σ s : set (big_type K), discrete_field s).1 :=
-(classical.some_spec (exists_max_of_chain K hc x y)).2
-
-lemma max_of_chain_mem {c : set (extensions K)}
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a.1) c)
-  (x y : ↥⋃ (s : c), s.1.1.1) : max_of_chain K hc x y ∈ c :=
-(classical.some_spec (exists_max_of_chain K hc x y)).1
-
-noncomputable def lift_bin {c : set (extensions K)}
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a) c)
-  (bin : Π s : extensions K, s.1.1 → s.1.1 → s.1.1)
-  (x y : ↥⋃ (s : c), s.1.1.1) : ↥⋃ (s : c), s.1.1.1 :=
-let z := (bin (max_of_chain K hc x y)
-    ⟨x, (mem_max_of_chain K hc x y).1⟩ ⟨y, (mem_max_of_chain K hc x y).2⟩) in
-inclusion (λ z hz, ⟨_, ⟨⟨_, max_of_chain_mem K hc x y⟩, rfl⟩, hz⟩) z
-
-lemma lift_add_assoc {c : set (extensions K)}
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a) c)
-  (x y z : ↥⋃ (s : c), s.1.1.1) :
-lift_bin K hc (λ _, (+)) (lift_bin K hc (λ _, (+)) x y) z =
-lift_bin K hc (λ _, (+)) x (lift_bin K hc (λ _, (+)) y z) :=
-begin
-  simp [lift_bin, -add_comm],
-
-end
-
-example (c : set (extensions K))
-  (hc : chain (λ (m a : extensions K), m.1 ≤ a) c)
-  (x : c) : discrete_field (↥⋃ (x : c), x.1.1.1) :=
-{ zero := ⟨↑(0 : set.range (embedding K)), x.1.1.1, ⟨x, rfl⟩,
-    let ⟨h, _⟩ := x.1.2 in h (subtype.property (0 : set.range (embedding K)))⟩,
-  one := ⟨↑(1 : set.range (embedding K)), x.1.1.1, ⟨x, rfl⟩,
-    let ⟨h, _⟩ := x.1.2 in h (subtype.property (1 : set.range (embedding K)))⟩,
-  add := λ x y, begin
-
-
-
-  end }
-#print imax
-#print chain
-
-def algebraic_closure_aux : ∃ m : set_thinger K, ∀ a, m ≤ a → a ≤ m :=
+def algebraic_closure_aux : ∃ m : extensions K, ∀ a, m ≤ a → a ≤ m :=
 zorn
   (λ c hc, if h : c = ∅
-    then ⟨⟨⟨set.range (thing1er K), infer_instance⟩,
-      ⟨by refl, by simp [inclusion, subtype.eta]; exact is_ring_hom.id⟩⟩,
-        λ a ha, absurd ha (h.symm ▸ set.not_mem_empty _)⟩
-    else ⟨⟨⟨⋃ x : c, x.1.1.1, _⟩, _⟩, sorry⟩)
+    then ⟨⟨⟨set.range (embedding K), by apply_instance⟩,
+        by refl, by split; intros; apply subtype.eq; simp [inclusion],
+        λ ⟨x, _⟩, by simp [inclusion];
+          exact in_algebraic_closure.of_field id _⟩,
+      λ a, h.symm ▸ false.elim⟩
+    else _)
   (λ _ _ _, le_trans)
 
 

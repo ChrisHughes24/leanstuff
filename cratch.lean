@@ -1,3 +1,274 @@
+import tactic.ring data.real.basic algebra.module
+example (x : ℝ) : x=2 → 2+x=x+2 := begin intro h, ring, end -- works
+example (x : ℝ) : x=2 → 2*x=x*2 := begin intro h, ring, end -- works
+example (x y : ℝ) : (x - y) ^ 3 = x^3 - 3 * x^2 * y + 3 * x * y^2 - y^3 := by ring
+
+#print semimodule
+constant r : ℕ → ℕ → Prop
+notation a ` ♥ `:50 b :50:= r b a
+infix ` ♠ ` : 50 := r
+#print notation ♥
+example (a b : ℕ) : a ♥ b :=
+begin
+/-
+1 goal
+a b : ℕ
+⊢ b ♠ a
+-/
+end
+
+
+#exit
+import tactic.norm_num data.zmod.basic
+
+example : ∃ x y z : ℤ, x^3 + y^3 + z^3 = 33 :=
+⟨8866128975287528, -8778405442862239, -2736111468807040, by norm_num⟩
+
+#print X
+
+example : ∀ (x y z : zmod 9), x^3 + y^3 + z^3 ≠ 4 := dec_trivial
+
+
+#exit
+import analysis.normed_space.basic
+
+variable {Β : Type*}
+
+namespace hidden
+
+@[simp] lemma norm_mul [normed_field-eq B] (a b : Β) : ∥a * b∥ = ∥a∥ * ∥b∥ :=
+normed_field.norm_mul a b
+
+instance normed_field.is_monoid_hom_norm [normed_field α] : is_monoid_hom (norm : α → ℝ) :=
+⟨norm_one, norm_mul⟩
+
+@[simp] lemma norm_pow [normed_field α] : ∀ (a : α) (n : ℕ), ∥a^n∥ = ∥a∥^n :=
+is_monoid_hom.map_pow norm
+
+end hidden
+
+#exit
+import tactic.norm_num
+
+def FP_step : ℕ × ℕ → ℕ × ℕ :=
+ λ ⟨a,b⟩, ⟨b,(a + b) % 89⟩
+
+def FP : ℕ → ℕ × ℕ
+| 0 := ⟨0,1⟩
+| (n + 1) := FP_step (FP n)
+
+def F (n : ℕ) : ℕ := (FP n).fst
+
+lemma FP_succ {n a b c : ℕ}
+  (h : FP n = (a, b)) (h2 : (a + b) % 89 = c) : FP (nat.succ n) = (b, c) :=
+by rw [← h2, FP, h]; refl
+set_option pp.max_steps 1000000000
+set_option pp.max_depth 1000000000
+
+lemma L : F 44 = 0 := begin
+  have : FP 0 = (0, 1) := rfl,
+  iterate 44 { replace := FP_succ this (by norm_num; refl) },
+  exact congr_arg prod.fst this
+end
+
+lemma zero_eq_one : 0 = @has_zero.zero ℕ ⟨1⟩ :=
+begin
+  refl,
+end
+
+#print L
+
+#exit
+--import data.zmod.basic
+
+lemma double_neg_em : (∀ p, ¬¬p → p) ↔ (∀ p, p ∨ ¬p) :=
+⟨λ dneg p, dneg (p ∨ ¬ p) (λ h, h (or.inr (h ∘ or.inl))),
+λ em p hneg, (em p).elim id (λ h, (hneg h).elim)⟩
+#print or.assoc
+lemma z : (∀ {α : Type} {p : α → Prop}, (∀ x, p x) ↔ ¬ ∃ x, ¬ p x) → ∀ (P : Prop), P ∨ ¬ P :=
+λ h P, (@h unit (λ _, P ∨ ¬ P)).2 (λ ⟨_, h⟩, h (or.inr (h ∘ or.inl))) ()
+#print axioms z
+
+lemma y : (7 + 8) + 5 = 7 + (8 + 5) :=
+add_assoc 7 8 5
+#print axioms nat.mul_assoc
+#reduce y
+
+example : 0 = @has_zero.zero ℕ ⟨1⟩ :=
+begin
+  refl,
+
+end
+
+example : (⊥ : ℕ) = @lattice.has_bot.bot ℕ ⟨1⟩ :=
+begin
+  refl,
+
+end
+
+
+lemma b {m n : ℕ} : (m * n) % n = 0 :=
+nat.mul_mod_left _ _
+
+
+lemma iff_assoc {p q r : Prop} : p ↔ (q ↔ r) ↔ (p ↔ q ↔ r) := by tauto!
+
+#print iff_assoc
+
+lemma eq_assoc {p q r : Prop} : p = (q = r) = (p = q = r) :=
+by simpa [iff_iff_eq] using iff.assoc
+
+#print iff_assoc
+#reduce iff.assoc
+
+example {p q : Prop} : (p ↔ p ∧ q) ↔ (p → q) :=
+by split; intros; simp * at *
+
+#exit
+import data.real.basic
+
+example : (2 : ℝ) ≤ ((((2 - (157 / 50 / 2 ^ (4 + 1)) ^ 2) ^ 2 - 2) ^ 2 - 2) ^ 2 - 2) ^ 2 :=
+begin
+  rw (show 4 + 1 = 5, from rfl),
+  rw (show (2 : ℝ) ^ 5 = 32, by norm_num),
+  rw (show (157 : ℝ) / 50 / 32 = 157 / 1600, by norm_num),
+  rw (show ((157 : ℝ) / 1600) ^ 2 = 24649 / 2560000, by norm_num),
+  rw (show (2 : ℝ) - 24649 / 2560000 = 5095351/2560000, by norm_num),
+  rw (show ((5095351 : ℝ) /2560000) ^ 2 = 25962601813201/6553600000000, by norm_num),
+  -- let's try skipping steps
+  rw (show ((((25962601813201 : ℝ) / 6553600000000 - 2) ^ 2 - 2) ^ 2 - 2) ^ 2 =
+    6806775565993596917798714352237438749189222725565123913061124308255143227446400872965401873904861225601/3402823669209384634633746074317682114560000000000000000000000000000000000000000000000000000000000000000,
+    by norm_num),
+  -- worked!
+  -- ⊢ 2 ≤
+  --  6806775565993596917798714352237438749189222725565123913061124308255143227446400872965401873904861225601 /
+  --    3402823669209384634633746074317682114560000000000000000000000000000000000000000000000000000000000000000
+  rw le_div_iff,
+  { norm_num },
+  { norm_num }
+  -- ⊢ 0 < 3402823669209384634633746074317682114560000000000000000000000000000000000000000000000000000000000000000
+
+end
+
+
+import algebra.big_operators data.int.basic
+
+open finset nat
+variables {α : Type*} [semiring α]
+--set_option trace.simplify.rewrite true
+
+lemma nat.sub_right_inj {a b c : ℕ} (h₁ : c ≤ a) (h₂ : c ≤ b) : a - c = b - c ↔ a = b :=
+by rw [nat.sub_eq_iff_eq_add h₁, nat.sub_add_cancel h₂]
+
+lemma lemma1 {x y z : ℕ → α} (n : ℕ) : (range (n + 1)).sum
+  (λ i, (range (i + 1)).sum (λ j, x j * y (i - j)) * z (n - i)) =
+  (range (n + 1)).sum (λ i, x i * (range (n - i + 1)).sum (λ j, y j * z (n - i - j))) :=
+begin
+  induction n,
+  { simp [mul_assoc] },
+  { simp [*, mul_assoc, @range_succ (succ n_n)] at * }
+end
+
+#print imp_congr_ctx
+#print lemma1
+
+#exit
+import algebra.group data.equiv.basic
+
+variables {α : Type*} {β : Type*}
+
+structure monoid_equiv (α β : Type*) [monoid α] [monoid β] extends α ≃ β :=
+(mul_hom : ∀ x y, to_fun (x * y) = to_fun x * to_fun y)
+
+infix ` ≃ₘ ` : 50 := monoid_equiv
+
+instance sfklkj [monoid α] [monoid β] (f : α ≃ₘ β) : is_monoid_hom f.to_fun :=
+{ map_mul := f.mul_hom,
+  map_one := calc f.to_equiv.to_fun 1
+    = f.to_equiv.to_fun 1 * f.to_equiv.to_fun (f.to_equiv.inv_fun 1) :
+      by rw [f.to_equiv.right_inv, mul_one]
+    ... = 1 : by rw [← f.mul_hom, one_mul, f.to_equiv.right_inv] }
+
+#exit
+import data.multiset
+
+
+open nat
+
+def S : multiset ℕ := quot.mk _ [1,2]
+
+def T : multiset ℕ := quot.mk _ [2,1]
+
+lemma S_eq_T : S = T := quot.sound (list.perm.swap _ _ _)
+
+def X (m : multiset ℕ) : Type := {n : ℕ // n ∈ m}
+
+def n : X S := ⟨1, dec_trivial⟩
+
+def n' : X T := eq.rec_on S_eq_T n
+set_option pp.proofs true
+#reduce n'
+
+def id' (n : ℕ) : ℕ := pred (1 + n)
+
+lemma id'_eq_id : id' = id := funext $ λ _, by rw [id', add_comm]; refl
+
+def Y (f : ℕ → ℕ) : Type := {n : ℕ // f n = n}
+
+def m : Y id := ⟨0, rfl⟩
+
+def m' : Y id' := eq.rec_on id'_eq_id.symm m
+set_option pp.proofs true
+#reduce m'
+
+import topology.metric_space.basic tactic.find
+open filter
+universes u v
+variables {ι : Type u} {α : ι → Type v} [fintype ι] [∀ i, metric_space (α i)]
+
+#print function.inv_fun
+
+lemma g : lattice.complete_lattice Prop := by apply_instance
+#print lattice.complete_lattice_Prop
+lemma h :
+  (⨅ (ε : ℝ) (h : ε > 0), principal {p : (Π i, α i) × (Π i, α i) | dist p.1 p.2 < ε} =
+  ⨅ i : ι, filter.comap (λ a : (Π i, α i)×(Π i, α i), (a.1 i, a.2 i)) uniformity)
+  =
+  ∀ (ε : ℝ) (h : ε > 0), principal {p : (Π i, α i) × (Π i, α i) | dist p.1 p.2 < ε} =
+  ⨅ i : ι, filter.comap (λ a : (Π i, α i)×(Π i, α i), (a.1 i, a.2 i)) uniformity :=
+by simp [lattice.infi_Prop_eq]
+
+#exit
+
+--local attribute [semireducible] reflected
+#print char.to_nat
+#print string.to_nat
+#eval "∅".front.to_nat
+
+#eval (⟨11, dec_trivial⟩ : char)
+#eval "∅".front.to_nat - "/".front.to_nat
+#eval 8662 - 8192 - 256 - 128 - 64 - 16 - 4 - 2
+#eval "/".front.to_nat
+
+meta def f (n : ℕ) (e : expr): expr :=
+`(nat.add %%e %%`(n))
+
+def g : ℕ := by tactic.exact (f 5 `(1))
+#print int
+#eval g
+
+def foo : bool → nat → bool
+| tt 0     := ff
+| tt m     := tt
+| ff 0     := ff
+| ff (m+1) := foo ff m
+
+#print prefix foo
+#print reflect
+#eval foo tt 1
+
+
+#exit
 import topology.metric_space.basic
 open nat
 structure aux : Type 1 :=
@@ -10,7 +281,7 @@ noncomputable def my_def (X : ℕ → Type) [m : ∀n, metric_space (X n)] : ∀
 | 0 :=
   { space := X 0,
     metric := by apply_instance }
-| (succ n) := 
+| (succ n) :=
   { space := prod (my_def n).space (X n.succ),
     metric := @prod.metric_space_max _ _ (my_def n).metric _ }
 
@@ -23,7 +294,7 @@ example : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n :
     {space := prod.{0 0} ((@my_def._main X m n).space) (X (nat.succ n)),
      metric := @prod.metric_space_max.{0 0} ((@my_def._main X m n).space) (X (nat.succ n))
                  ((@my_def._main X m n).metric)
-                 (m (nat.succ n))} := 
+                 (m (nat.succ n))} :=
   λ _ _ _, by tactic.reflexivity tactic.transparency.all
 
 example : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n : nat),
@@ -32,23 +303,23 @@ example : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n :
                  ((@my_def._main X m n).metric)
                  (m (nat.succ n))}
 {space := prod.{0 0} ((@my_def X m n).space) (X (nat.succ n)),
-     metric := @prod.metric_space_max.{0 0} ((@my_def X m n).space) (X (nat.succ n)) 
+     metric := @prod.metric_space_max.{0 0} ((@my_def X m n).space) (X (nat.succ n))
      ((@my_def X m n).metric)
                  (m (nat.succ n))} := λ _ _ _, rfl
 example : my_def = my_def._main := rfl
 
 lemma b : ∀ (X : nat → Type) [m : Π (n : nat), metric_space.{0} (X n)] (n : nat),
-  @eq.{2} aux 
+  @eq.{2} aux
     {space := prod.{0 0} ((@my_def X m n).space) (X (nat.succ n)),
-     metric := @prod.metric_space_max.{0 0} ((@my_def X m n).space) (X (nat.succ n)) 
+     metric := @prod.metric_space_max.{0 0} ((@my_def X m n).space) (X (nat.succ n))
      ((@my_def X m n).metric)
-                 (m (nat.succ n))} 
-    (@my_def X m (nat.succ n)) 
+                 (m (nat.succ n))}
+    (@my_def X m (nat.succ n))
   := λ _ _ _, by tactic.reflexivity tactic.transparency.all
 
-example (X : ℕ → Type) [m : ∀n, metric_space (X n)] (n : ℕ) : 
-  my_def X (n+1) = ⟨(my_def X n).space × (X n.succ), 
-    @prod.metric_space_max.{0 0} _ _ (my_def X n).metric _⟩ := 
+example (X : ℕ → Type) [m : ∀n, metric_space (X n)] (n : ℕ) :
+  my_def X (n+1) = ⟨(my_def X n).space × (X n.succ),
+    @prod.metric_space_max.{0 0} _ _ (my_def X n).metric _⟩ :=
 by refl
 
 #print my_def._main
@@ -151,7 +422,7 @@ import logic.function
 
 universes u v
 axiom choice : Π (α : Sort u), nonempty (nonempty α → α)
-
+∈
 example : nonempty (Π {α : Sort u}, nonempty α → α) :=
 let ⟨x⟩ := choice (Σ' α : Sort u, nonempty α) in
 have _ := x _,
@@ -4082,7 +4353,7 @@ lemma pierce_em : (∀ p q : Prop, ((p → q) → p) → p) ↔ (∀ p, p ∨ ¬
 #print axioms pierce_em
 
 lemma double_neg_em : (∀ p, ¬¬p → p) ↔ (∀ p, p ∨ ¬p) :=
-⟨λ dneg p, dneg _ (λ h, h (or.inr (h ∘ or.inl))),
+⟨λ dneg p, dneg () (λ h, h (or.inr (h ∘ or.inl))),
 λ em p hneg, (em p).elim id (λ h, (hneg h).elim)⟩
 
 #print axioms double_neg_em

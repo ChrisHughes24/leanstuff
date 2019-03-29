@@ -1,4 +1,4 @@
-import group_theory.alternating
+import data.complex.polynomial
 
 open declaration tactic
 
@@ -50,8 +50,8 @@ do l ← const_in_def_trans_aux₂ ([n], []),
 trace l.2.length,
 trace (list.insertion_sort (≤) (l.2.map to_string)),
 return ()
-
-#eval const_in_def_trans `simple_group_A5
+set_option profiler true
+#eval const_in_def_trans `complex.exists_root
 #print environment.is_projection
 -- #eval const_in_def_trans `zmodp.is_square_iff_is_square_of_mod_four_eq_one
 
@@ -64,7 +64,7 @@ let l : list name := environment.fold e []
     | cnst n _ _ _ := n :: l
     | ax n _ _ := n :: l end),
 return l
-
+#print unsigned_sz
 meta def list_namespace : tactic unit :=
 do l ← list_all_consts,
 let m := l.filter (λ n, n.get_prefix = `polynomial),
@@ -145,8 +145,6 @@ match d with
   return (l ++ l'.bind id).erase_dup
 | d := pure []
 end
-
-
 
 meta def const_in_def_depth_aux' : ℕ → Π n : name, tactic (list name)
 | 0     n := pure []
