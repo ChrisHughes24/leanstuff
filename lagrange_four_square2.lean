@@ -57,10 +57,6 @@ let ⟨x, hx⟩ := h01 in let ⟨y, hy⟩ := h23 in
     exact this,
   end⟩
 
-lemma card_roots' {α : Type*} [integral_domain α] {p : polynomial α} (hp0 : p ≠ 0) :
-  p.roots.card ≤ nat_degree p :=
-with_bot.coe_le_coe.1 (le_trans (card_roots hp0) (le_of_eq $ degree_eq_nat_degree hp0))
-
 lemma card_image_polynomial_eval {α : Type*} [integral_domain α] [fintype α] [decidable_eq α]
   {p : polynomial α} (hp : 0 < p.degree) :
   fintype.card α ≤ nat_degree p * (univ.image (λ x, eval x p)).card :=
