@@ -8,25 +8,22 @@ lemma nat.div_mul_le (a) {b} (hb : 0 < b) : a / b * b ≤ a :=
 have h : 0 + a / b * b ≤ a % b + a / b * b := add_le_add (nat.zero_le _) (le_refl _),
 by rwa [zero_add, mul_comm, nat.mod_add_div, mul_comm] at h
 
-lemma int.nat_abs_pow (a : ℤ) (n : ℕ) : a.nat_abs ^ n = (a ^ n).nat_abs :=
-by induction n; simp [*, nat.pow_succ, _root_.pow_succ, nat_abs_mul, mul_comm]
-
 lemma int.dvd_of_pow_dvd_pow {a b : ℤ} {n : ℕ} (hn : 0 < n) (h : a ^ n ∣ b ^ n) : a ∣ b :=
 begin
-  rw [← nat_abs_dvd, ← dvd_nat_abs, ← int.nat_abs_pow, ← int.nat_abs_pow, int.coe_nat_dvd] at h,
+  rw [← nat_abs_dvd, ← dvd_nat_abs, int.nat_abs_pow, int.nat_abs_pow, int.coe_nat_dvd] at h,
   rw [← nat_abs_dvd, ← dvd_nat_abs, int.coe_nat_dvd],
   exact (nat.pow_dvd_pow_iff hn).1 h
 end
-#print ite
--- lemma nat.cast_div [division_ring α] [char_zero α] {n m : ℕ} (h : n ∣ m) (hn : n ≠ 0) :
---     ((m / n : ℕ) : α) = (m : α) / n :=
--- eq.symm ((div_eq_iff_mul_eq (by rwa nat.cast_ne_zero)).2 (by rw [← nat.cast_mul, nat.div_mul_cancel h]))
 
--- lemma nat.cast_div_le [linear_ordered_field α] {n m : ℕ} (hm : 0 < m) : ((n / m : ℕ) : α) ≤ (n / m : α) :=
--- le_of_mul_le_mul_right
---   (calc ((n / m : ℕ) : α) * m ≤ n : by rw [← nat.cast_mul, nat.cast_le]; exact nat.div_mul_le _ hm
---     ... =  (n / m : α) * m : (div_mul_cancel (n : α) (ne_of_lt (nat.cast_lt.2 hm)).symm).symm)
---   (nat.cast_lt.2 hm)
+lemma nat.cast_div [division_ring α] [char_zero α] {n m : ℕ} (h : n ∣ m) (hn : n ≠ 0) :
+    ((m / n : ℕ) : α) = (m : α) / n :=
+eq.symm ((div_eq_iff_mul_eq (by rwa nat.cast_ne_zero)).2 (by rw [← nat.cast_mul, nat.div_mul_cancel h]))
+
+lemma nat.cast_div_le [linear_ordered_field α] {n m : ℕ} (hm : 0 < m) : ((n / m : ℕ) : α) ≤ (n / m : α) :=
+le_of_mul_le_mul_right
+  (calc ((n / m : ℕ) : α) * m ≤ n : by rw [← nat.cast_mul, nat.cast_le]; exact nat.div_mul_le _ hm
+    ... =  (n / m : α) * m : (div_mul_cancel (n : α) (ne_of_lt (nat.cast_lt.2 hm)).symm).symm)
+  (nat.cast_lt.2 hm)
 
 lemma nat.prime.odd_iff_ge_three {p : ℕ} (hp : prime p) : p % 2 = 1 ↔ 3 ≤ p :=
 ⟨λ hpo, succ_le_of_lt (lt_of_le_of_ne hp.1 (λ h, by rw ← h at hpo; exact absurd hpo dec_trivial)),
@@ -78,8 +75,6 @@ have h2 : (2 : ℤ) ≠ 0 := by norm_num,
 
 open finset function
 
-example
-
 private def mod_sub_half (n m : ℤ) : ℤ := if ((n % m : ℤ) : ℚ) ≤ m / 2 then (n : ℤ) % m else n % m - m
 
 private lemma mod_sub_half_modeq {n m : ℤ} (hm : 0 < m) : mod_sub_half n m ≡ n [ZMOD m] :=
@@ -121,7 +116,7 @@ calc ((mod_sub_half n m * mod_sub_half n m : ℤ) : ℚ) =
   ((abs (mod_sub_half n m) : ℤ) : ℚ) * ((abs (mod_sub_half n m) : ℤ) : ℚ) :
       by rw [← int.cast_mul, ← abs_mul, abs_mul_self]
    ... ≤ (m / 2) * (m / 2) : mul_self_le_mul_self (int.cast_nonneg.2 (abs_nonneg _)) (mod_sub_half_le hm)
-   ... = m * m / 4 : by rw [div_mul_div, (show (2 : ℚ) * 2 = 4, from rfl)]
+   ... = m * m / 4 : by rw [_root_.div_mul_div, (show (2 : ℚ) * 2 = 4, from rfl)]
 
 private lemma mod_sub_half_lt_of_odd {n m : ℤ} (hm : 0 < m) (hmo : m % 2 = 1) :
   ((abs (mod_sub_half n m) : ℤ) : ℚ) < m / 2 :=
@@ -201,7 +196,8 @@ section odd_primes
 variables {p : ℕ} (hp : prime p) (hpo : p % 2 = 1)
 include hp hpo
 
-lemma bla14 {p : ℕ} (hp : prime p) (hpo : p % 2 = 1) {a b : fin (succ (p / 2))} : a.1 * a.1 + b.1 * b.1 + 1 < p * p :=
+lemma bla14 {p : ℕ} (hp : prime p) (hpo : p % 2 = 1) {a b : fin (succ (p / 2))} :
+  a.1 * a.1 + b.1 * b.1 + 1 < p * p :=
 have hf : ∀ {a : fin (succ (p / 2))}, (a.1 : ℚ) ≤ p / 2 := λ a,
   calc (a.1 : ℚ) ≤ ((p / 2 : ℕ) : ℚ) : nat.cast_le.2 (le_of_lt_succ a.2)
            ... ≤ (p / 2 : ℚ) : nat.cast_div_le dec_trivial,

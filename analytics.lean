@@ -1,4 +1,4 @@
-import data.complex.polynomial
+import linear_algebra.finite_dimensional
 
 open declaration tactic
 
@@ -51,10 +51,12 @@ trace l.2.length,
 trace (list.insertion_sort (≤) (l.2.map to_string)),
 return ()
 set_option profiler true
-#eval const_in_def_trans `complex.exists_root
+
+#eval const_in_def_trans `linear_map.mul_eq_one_comm
+
 #print environment.is_projection
 -- #eval const_in_def_trans `zmodp.is_square_iff_is_square_of_mod_four_eq_one
-
+#print int.le.dest
 meta def list_all_consts : tactic (list name) :=
 do e ← get_env,
 let l : list name := environment.fold e []
