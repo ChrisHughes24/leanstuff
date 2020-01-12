@@ -1,3 +1,1311 @@
+import data.setoid
+
+def M : Type := (classical.choice ⟨sigma.mk ℕ nat.monoid⟩).1
+
+noncomputable instance : monoid M := (classical.choice ⟨sigma.mk ℕ nat.monoid⟩).2
+
+inductive monoid_expr (α : Type) : Type
+| of (a : α) : monoid_expr
+| one {} : monoid_expr
+| mul    : monoid_expr → monoid_expr → monoid_expr
+
+open monoid_expr
+
+def eval {α β : Type} [has_mul β] [has_one β] (f : α → β) : monoid_expr α → β
+| (of x) := f x
+| one := 1
+| (mul x y) := eval x * eval y
+
+instance : setoid (monoid_expr M) :=
+{ r := λ x y, eval id x = eval id y,
+  iseqv := ⟨λ _, rfl, λ _ _, eq.symm, λ _ _ _, eq.trans⟩ }
+
+def M' : Type := @quotient (monoid_expr M) monoid_expr.setoid
+
+instance : monoid M' :=
+{ mul := λ x y,
+    quotient.lift_on₂' x y (λ x y, ⟦mul x y⟧)
+      (λ a₁ a₂ b₁ b₂ (h₁ : _ = _) (h₂ : _ = _),
+      quotient.sound $ show _ = _,
+        by simp [eval, *]),
+  mul_assoc := λ a b c, quotient.induction_on₃ a b c
+    (λ a b c, quotient.sound (mul_assoc (eval id a) _ _)),
+  one := ⟦one⟧,
+  one_mul := λ a, quotient.induction_on a
+    (λ a, quotient.sound (one_mul (eval id a))),
+  mul_one := λ a, quotient.induction_on a
+    (λ a, quotient.sound (mul_one (eval id a))) }
+
+#exit
+import data.fintype tactic.fin_cases
+variables p q : Prop
+
+open classical
+
+example : ¬(p → q) → p ∧ ¬q :=
+λ h,
+have notq : ¬q, from (λ hq', (h (λ hp, hq'))),
+and.intro
+(or.elim (em p)
+id
+(
+(λ hnp, _)))
+notq
+
+
+instance decidable_eq_endofunctions {qq : Type} [fintype qq] [decidable_eq qq] :
+  decidable_eq (qq → qq) := by apply_instance
+inductive nand_expr (n : ℕ) : Type
+| false {} : nand_expr
+| var (i : fin n) : nand_expr
+| nand : nand_expr → nand_expr → nand_expr
+
+{x : A × B | ∃ a : A, X = (a, f a)}
+
+namespace nand_expr
+
+def eval {n : ℕ} : nand_expr n → (fin n → bool) → bool
+| false      x := ff
+| (var i)    x := x i
+| (nand a b) x := !((eval a x) && (eval b x))
+
+lemma surjective_eval : Π {n : ℕ} (f : (fin n → bool) → bool),
+  {e : nand_expr n // e.eval = f }
+| 0 := λ f, if hf : f fin.elim0 = ff
+  then ⟨false, funext $ λ x, hf.symm.trans sorry⟩
+  else ⟨nand false false, sorry⟩
+| (n+1) := λ f, _
+
+end nand_expr
+
+#exit
+import data.set.basic
+
+inductive mynat
+| zero : mynat
+| succ : mynat → mynat
+
+namespace mynat
+
+def one : mynat := succ zero
+
+def two : mynat := succ one
+
+def add (a b : mynat) : mynat :=
+mynat.rec b (λ _, succ) a
+
+lemma one_add_one : add one one = two := eq.refl two
+
+lemma one_add_one' : 1 + 1 = 2 := eq.refl 2
+
+set_option pp.all true
+#print one_add_one
+
+
+
+set_option pp.all true
+
+#print exampl
+
+constant fintype (α : Type) : Type
+
+attribute [class] fintype
+
+def card (α : Type) [fintype α] : ℕ := sorry
+
+constant fintype_range {α : Type} [fintype α] {p : set α} : fintype ↥p
+
+attribute [instance] fintype_range
+
+instance {α β : Type} [fintype β] (f : β → α) : fintype (set.range f) := sorry
+
+lemma subset_lemma {α : Type} [fintype α] {p : set α} : card p = card p := sorry
+
+example {α β : Type} [fintype α] [fintype β] (f : β → α) :
+  card (set.range f) = card (set.range f):=
+begin
+  rw [subset_lemma], --fails
+end
+
+#exit
+import system.io
+
+def main : io nat :=
+do io.put_str "Hello world", return 1
+
+#exit
+import tactic.ring data.complex.basic
+
+example (a b c : ℂ) :
+  (a + b + c)^2 + (a + b - c)^2 + (a + c - b)^2 + (b + c - a)^2 =
+  (2 * a)^2 + (2 * b)^2 + (2 * c)^2 := by ring
+
+
+#exit
+import logic.basic data.fintype tactic.tauto
+
+def xo (a b : Prop) := ¬(a ↔ b)
+
+lemma xo_assoc_aux1 (a b c : Prop) (h : xo (xo a b) c) : xo a (xo b c) :=
+λ h₁,
+have h : ¬(¬(¬(b ↔ c) ↔ b) ↔ c),
+  from λ h₂,
+    h ⟨λ hab, h₂.mp (λ h₃, hab (h₁.trans h₃)),
+      λ hc hab, h₂.mpr hc (h₁.symm.trans hab)⟩,
+have hnc : ¬ c,
+  from λ hc, h ⟨λ _, hc, λ hc hbcb,
+    have hnb : ¬ b, from λ hb, hbcb.mpr hb (iff_of_true hb hc),
+    hnb (hbcb.mp (λ hbc, hnb (hbc.mpr hc)))⟩,
+have h : ¬(¬(b ↔ c) ↔ b),
+  from (not_not_not_iff _).1 (λ h₁, h ⟨λ h₂, (h₁ h₂).elim, λ hc, (hnc hc).elim⟩),
+have h : ¬ (¬ ¬ b ↔ b),
+  from λ hb,
+    h ⟨λ h, hb.mp (λ hnb, h (iff_of_false hnb hnc)), λ hb hbc, hnc (hbc.mp hb)⟩,
+have hnb : ¬ b,
+  from λ hb, h (iff_of_true (λ hnb, hnb hb) hb),
+h ⟨λ hnnb, (hnnb hnb).elim, λ hb, (hnb hb).elim⟩
+#reduce xo_assoc_aux1
+lemma xo_assoc_aux2 (a b c : Prop) : xo (xo a b) c → xo a (xo b c) :=
+begin
+  dsimp [xo],
+  assume h h₁,
+  replace h : ¬(¬(¬(b ↔ c) ↔ b) ↔ c),
+  { assume h₂,
+    apply h,
+    split,
+    { assume hab : ¬ (a ↔ b),
+      apply h₂.mp,
+      assume h₃,
+      apply hab,
+      apply h₁.trans,
+      exact h₃ },
+    { assume hc : c,
+      assume hab : a ↔ b,
+      apply h₂.mpr hc,
+      apply h₁.symm.trans,
+      exact hab } },
+  clear h₁ a,
+  have hnc : ¬ c,
+  { assume hc : c,
+    apply h,
+    split,
+    { exact λ _, hc },
+    { assume hc hbcb,
+      have hnb : ¬ b,
+      { assume hb : b,
+        apply hbcb.mpr hb,
+        exact iff_of_true hb hc },
+      { apply hnb,
+        apply hbcb.mp,
+        assume hbc,
+        apply hnb,
+        apply hbc.mpr,
+        exact hc } } },
+  replace h : ¬(¬¬(¬(b ↔ c) ↔ b)),
+  { assume h₁,
+    apply h,
+    split,
+    { assume h₂,
+      exact (h₁ h₂).elim },
+    { assume hc, exact (hnc hc).elim } },
+  replace h := (not_not_not_iff _).1 h,
+  replace h : ¬ (¬ ¬ b ↔ b),
+  { assume hb,
+    apply h,
+    split,
+    { assume h,
+      apply hb.mp,
+      assume hnb,
+      apply h,
+      exact iff_of_false hnb hnc },
+    { assume hb hbc,
+      apply hnc,
+      apply hbc.mp hb } },
+  clear hnc c,
+  have hnb : ¬ b,
+  { assume hb,
+    apply h,
+    exact iff_of_true (λ hnb, hnb hb) hb },
+  apply h,
+  exact ⟨λ hnnb, (hnnb hnb).elim, λ hb, (hnb hb).elim⟩
+end
+
+#reduce xo_assoc_aux
+
+
+#print ring
+set_option class.instance_max_depth 200
+instance : fintype (ring bool) :=
+fintype.of_equiv
+  (Σ' (add : bool → bool → bool)
+      (add_assoc : ∀ a b c, add (add a b) c = add a (add b c))
+      (zero : bool)
+      (zero_add : ∀ a, add zero a = a)
+      (add_zero : ∀ a, add a zero = a)
+      (neg : bool → bool)
+      (add_left_neg : ∀ a, add (neg a) a = zero)
+      (add_comm : ∀ a b, add a b = add b a)
+      (mul : bool → bool → bool)
+      (mul_assoc : ∀ a b c, mul (mul a b) c = mul a (mul b c))
+      (one : bool)
+      (one_mul : ∀ a, mul one a = a)
+      (mul_one : ∀ a, mul a one = a)
+      (left_distrib : ∀ a b c, mul a (add b c) = add (mul a b) (mul a c)),
+      ∀ b c a, mul (add b c) a = add (mul b a) (mul c a) )
+  { to_fun := λ ⟨x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩,
+      ⟨x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩,
+    inv_fun := λ ⟨x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩,
+      ⟨x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩,
+    left_inv := λ ⟨x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15⟩, rfl,
+    right_inv := λ a, by cases a; refl }
+
+#eval fintype.card {op : bool → bool → bool //
+  ∀ a b c, op (op a b) c = op a (op b c)}
+
+example : fintype.card (ring bool) = 2 := rfl
+
+
+local attribute [instance, priority 0] classical.prop_decidable
+
+lemma iff.assoc {a b c : Prop} : ((a ↔ b) ↔ c) ↔ (a ↔ (b ↔ c)) :=
+if h : a then by simp [h] else by simp [h, not_iff]
+
+lemma or_iff_distrib_left {a b c : Prop} : (a ∨ (b ↔ c)) ↔ ((a ∨ b) ↔ (a ∨ c)) :=
+⟨λ h, by cases h; simp [h], λ h, by by_cases a; simp * at *⟩
+
+lemma or_iff_distrib_right {a b c : Prop} : ((a ↔ b) ∨ c) ↔ ((a ∨ c) ↔ (b ∨ c)) :=
+by rw [or_comm, or_iff_distrib_left, or_comm, or_comm c]
+
+instance : discrete_field Prop :=
+{ add := (↔),
+  mul := (∨),
+  add_assoc := λ _ _ _, propext $ iff.assoc,
+  zero := true,
+  zero_add := λ _, propext $ true_iff _,
+  add_zero := λ _, propext $ iff_true _,
+  neg := id,
+  add_left_neg := λ _, propext $ iff_true_intro iff.rfl,
+  add_comm := λ _ _, propext iff.comm,
+  mul_assoc := λ _ _ _, propext $ or.assoc,
+  one := false,
+  one_mul := λ _, propext $ false_or _,
+  mul_one := λ _, propext $ or_false _,
+  left_distrib := λ _ _ _, propext $ or_iff_distrib_left,
+  right_distrib := λ _ _ _, propext $ or_iff_distrib_right,
+  mul_comm := λ _ _, propext $ or.comm,
+  inv := id,
+  zero_ne_one := true_ne_false,
+  mul_inv_cancel := λ a ha0, if ha : a
+    then (ha0 (eq_true_intro ha)).elim
+    else eq_false_intro (λ h, h.elim ha ha),
+  inv_mul_cancel := λ a ha0, if ha : a
+    then (ha0 (eq_true_intro ha)).elim
+    else eq_false_intro (λ h, h.elim ha ha),
+  has_decidable_eq := classical.dec_eq _,
+  inv_zero := rfl }
+
+
+variable V : Type
+
+structure toto := (val : list V)
+
+inductive shorter : toto V -> toto V -> Prop
+| step : ∀ (z : V) (l : list V), shorter ⟨l⟩ ⟨z::l⟩
+
+lemma shorter_wf : well_founded (shorter V)
+    := by { apply well_founded.intro, intro l, cases l with xs,
+        induction xs with y ys; apply acc.intro; intros; cases a,
+        apply xs_ih }
+
+instance : has_well_founded (toto V) := ⟨shorter V, shorter_wf V⟩
+#print int.comm_semiring
+def fold : toto V -> Prop
+    | ⟨[]⟩    := true
+    | ⟨x::xs⟩ := have h : shorter V ⟨xs⟩ ⟨x::xs⟩ := shorter.step x xs,
+        fold ⟨xs⟩
+using_well_founded { rel_tac := λ _ _, `[exact ⟨_, shorter_wf V⟩],
+  dec_tac := `[exact h] }
+
+#exit
+import set_theory.ordinal
+
+universe u
+noncomputable theory
+#print axioms int.comm_ring
+example : ((<) : cardinal.{u} → cardinal.{u} → Prop)
+  ≼o ((<) : ordinal.{u} → ordinal.{u} → Prop) :=
+cardinal.ord.order_embedding
+
+def ordinal.to_cardinal : ordinal.{u} → cardinal.{u}
+| o := begin
+  have :=
+
+
+end
+
+
+example : ((<) : ordinal.{u} → ordinal.{u} → Prop)
+  ≼o ((<) : cardinal.{u} → cardinal.{u} → Prop) :=
+⟨⟨λ o : ordinal.{u}, well_founded.fix ordinal.wf.{u} begin end o, _⟩, _⟩
+
+#exit
+import linear_algebra.basic
+
+set_option pp.implicit true
+
+
+
+
+lemma X {p q : Prop} : (p ↔ ¬q) ↔ ¬(p ↔ q) :=
+sorry
+#print not_false
+example {p : Prop} : p ∨ ¬p :=
+((@X (p ∨ ¬p) false).mpr (λ h, h.mp (or.inr (λ hp, h.mp (or.inl hp))))).mpr (λb,b)
+
+example := by library_search
+
+example {α : Type} (s : set α) : s = s ⁻¹' {true} :=
+set.ext $ λ x, ⟨λ h, or.inl (eq_true_intro h),
+  λ h, h.elim (λ h, h.mpr trivial) false.elim⟩
+
+example {ι : Type} (i : ι) (f : Π (j : subtype (≠ i)), M₁ j.val)
+
+import topology.opens
+
+open topological_space
+
+lemma opens.supr_val {X γ : Type*} [topological_space X] (ι : γ → opens X) :
+  (⨆ i, ι i).val = ⨆ i, (ι i).val :=
+@galois_connection.l_supr (opens X) (set X) _ _ _ (subtype.val : opens X → set X)
+    opens.interior opens.gc _
+
+lemma what_is_this_called {X Y : Type*} [topological_space X] [topological_space Y] {f : X → Y}
+  (hf : continuous f) {γ : Type*} (ι : γ → opens Y) :
+  (⨆ (j : γ), hf.comap (ι j)).val = ⋃ (j : γ), f ⁻¹' (ι j).val :=
+opens.supr_val _
+
+#exit
+import algebra.pi_instances
+
+universes u v w
+
+class SemiModule (β : Type v) [add_comm_monoid β]
+
+abbreviation Module (β : Type v) [add_comm_group β] :=
+SemiModule β
+
+instance piSemiModule (I : Type w) (f : I → Type u)
+  [∀ i, add_comm_monoid $ f i] [∀ i, SemiModule (f i)] :
+  SemiModule (Π i : I, f i) := by constructor
+set_option pp.implicit true
+-- instance piSemiModule' (I : Type w) (f : I → Type u)
+--   [∀ i, add_comm_group $ f i] [∀ i, SemiModule (f i)] :
+--   SemiModule (Π i : I, f i) := begin
+
+--     apply_instance
+
+--   end
+
+example (I : Type w) (f : I → Type u) [∀ i, add_comm_group $ f i] :
+  @pi.add_comm_monoid I f _ = @add_comm_group.to_add_comm_monoid _ _ := rfl
+set_option trace.class_instances true
+#check piSemiModule _ _
+instance piModule (I : Type w) (f : I → Type u)
+  [∀ i, add_comm_group $ f i] [∀ i, SemiModule (f i)] : -- changed from Module
+  Module (Π i : I, f i) := begin
+  delta Module,
+  -- ⊢ SemiModule (Π (i : I), f i)
+  -- apply piSemiModule I f, -- works
+  apply_instance -- still fails
+end
+/-
+@SemiModule (Π (i : I), f i)
+  (@pi.add_comm_monoid I (λ (i : I), f i) (λ (i : I), _inst_1 i))
+
+-/
+#exit
+import ring_theory.integral_closure set_theory.schroeder_bernstein
+#print function.embedding.trans
+example {R A : Type} [comm_ring A] [comm_ring R] [algebra R A] (S : subalgebra R A)
+  {x y : A} (hx : x ∈ S) (hy : y ∈ S) : x + y ∈ S := by library_search
+open_locale classical
+example {α β ι : Type*} [hι : nonempty ι] {S : ι → set α} (f : α → β)
+  (hf : function.injective f) : (⨅ i, f '' S i) = f '' (⨅ i, S i) :=
+by resetI; rcases hι with ⟨i⟩; exact
+  set.ext (λ x, ⟨λ h, by rcases set.mem_Inter.1 h i with ⟨y, hy, rfl⟩;
+    exact ⟨y, set.mem_Inter.2 (λ j, by rcases set.mem_Inter.1 h j with ⟨z, hz⟩;
+      exact (hf hz.2 ▸ hz.1)), rfl⟩,
+  by rintros ⟨y, hy, rfl⟩; exact set.mem_Inter.2 (λ i, set.mem_image_of_mem _
+    (set.mem_Inter.1 hy _))⟩)
+/-
+structure functor (C : Type u₁) [category.{v₁} C] (D : Type u₂) [category.{v₂} D] :
+  Type (max v₁ v₂ u₁ u₂) :=
+(obj       : C → D)
+(map       : Π {X Y : C}, (X ⟶ Y) → ((obj X) ⟶ (obj Y)))
+(map_id'   : ∀ (X : C), map (𝟙 X) = 𝟙 (obj X) . obviously)
+(map_comp' : ∀ {X Y Z : C} (f : X ⟶ Y) (g : Y ⟶ Z), map (f ≫ g) = (map f) ≫ (map g) . obviously)
+
+infixr ` ⥤ `:26 := functor       -- type as \func --
+-/
+
+variables {X : Type*} [topological_space X]
+
+open topological_space
+
+def res_functor {Y₁ Y₂ : set X} (hY : Y₂ ⊆ Y₁) :
+    {V : opens X // Y₁ ⊆ V} ⥤ {V : opens X // Y₂ ⊆ V} :=
+{ obj := λ V, ⟨V.1, set.subset.trans hY V.2⟩,
+  map := λ _ _, id}
+
+example (Y : set X) : res_functor (set.subset.refl Y) = 𝟭 _ :=
+begin
+  apply category_theory.functor.mk.inj_eq.mpr,
+  simp, refl,
+end
+
+#exit
+import data.nat.prime data.zsqrtd.gaussian_int
+
+inductive W {α : Type*} (β : α → Type*)
+| mk (a : α) (b : β a → W) : W
+
+def blah {α : Type*} (β : α → Type*) [Π a, fintype (β a)] : W β → ℕ
+| mk a b := begin
+
+
+end
+
+
+
+local notation `ℤ[i]` := gaussian_int
+#eval let s := (finset.Ico 20 10000).filter nat.prime in
+  ((s.sigma (λ n, (finset.Ico 20 n).filter nat.prime)).filter
+  (λ n : Σ n, ℕ, nat.sqrt (n.1^2 - n.2^2) ^ 2 = n.1^2 - n.2^2)).image
+  (λ n : Σ n, ℕ, (n.1, n.2, (n.1^2 - n.2^2).factors))
+#eval nat.factors (71^2 + 31^2)
+#eval (nat.prime 31 : bool)
+#eval nat.sqrt(181^2 - 19^2)
+#eval nat.factors 180
+#eval (180^2 + 19^2 = 181^2 : bool)
+#eval (nat.prime 181 : bool)
+
+import tactic.split_ifs
+
+open nat
+
+inductive tree : Type
+| lf : tree
+| nd : tree -> nat -> tree -> tree
+
+open tree
+
+def fusion : tree -> tree -> tree
+| lf t2 := t2
+| (nd l1 x1 r1) lf := (nd l1 x1 r1)
+| (nd l1 x1 r1) (nd l2 x2 r2) :=
+    if x1 <= x2
+    then nd (fusion r1 (nd l2 x2 r2)) x1 l1
+    else nd (fusion (nd l1 x1 r1) r2) x2 l2
+
+def occ : nat -> tree -> nat
+| _ lf := 0
+| y (nd g x d) := (occ y g) + (occ y d) + (if x = y then 1 else 0)
+
+theorem q5 : ∀ (x : ℕ) (t1 t2 : tree),
+    (occ x (fusion t1 t2)) = (occ x t1) + (occ x t2) :=
+begin
+    intros x t1 t2,
+    induction t1 with g1 x1 d1 _ ih1,
+    simp [fusion, occ],
+    induction t2 with g2 x2 d2 _ ih2,
+    simp [fusion, occ],
+    by_cases x1 <= x2,
+    simp [fusion, h, occ],
+    rw ih1,
+    simp [occ, fusion, h],
+    simp [occ, fusion, h],
+    rw ih2,
+    simp [occ, fusion],
+end
+∀ t2
+theorem q5 : ∀ (x : ℕ) (t1 t2 : tree),
+    (occ x (fusion t1 t2)) = (occ x t1) + (occ x t2) :=
+begin
+  intros x t1,
+  induction t1 with g1 x1 d1 _ ih1,
+  { simp [fusion, occ] },
+  { assume t2,
+    induction t2 with g2 x2 d2 _ ih2,
+    simp [fusion, occ],
+    by_cases x1 <= x2,
+    { simp [fusion, h, occ, ih1] },
+    { simp [occ, fusion, h, ih2] }, },
+end
+
+theorem q5 (x : ℕ) : ∀ (t1 t2 : tree),
+    (occ x (fusion t1 t2)) = (occ x t1) + (occ x t2)
+| lf t2 := by simp [fusion, occ]
+| (nd l1 x1 r1) lf := by simp [fusion, occ]
+| (nd l1 x1 r1) (nd l2 x2 r2) :=
+begin
+  simp only [fusion, occ],
+  by_cases hx12 : x1 ≤ x2,
+  { rw [if_pos hx12],
+    simp only [fusion, occ],
+    rw q5,
+    simp [occ] },
+  { rw if_neg hx12,
+    simp only [fusion, occ],
+    rw q5,
+    simp [occ] }
+end
+
+
+#exit
+import ring_theory.algebra
+
+example {R : Type*} [comm_ring R] :
+  (algebra.to_module : module ℤ R) = add_comm_group.module :=
+
+
+variable {n : ℕ}
+open function nat finset
+#print test_bit
+def binary (A : finset ℕ) : ℕ := A.sum (λ x, pow 2 x)
+
+def ith_bit (n i : ℕ) := n / 2 ^ i % 2
+
+
+-- lemma ith_bit_binary (A : finset ℕ) : ∀ i,
+--   i ∈ A ↔ ¬ even (binary A / 2 ^ i) :=
+-- finset.induction_on A
+--   (by simp [binary, ith_bit])
+--   (λ a s has ih i,
+--     begin
+--       dsimp [binary, ith_bit] at *,
+--       rw [sum_insert has, mem_insert],
+--       have hnm : ∀ {n m}, n < m → 2^n / 2^m = 0,
+--         from λ n m h, div_eq_of_lt ((pow_lt_iff_lt_right (le_refl _)).2 h),
+--       have hnm' : ∀ {n m : ℕ}, n < m → 2^m % 2^n = 0, from sorry,
+--       have h2p : ∀ {n : ℕ}, 0 < 2^n, from sorry,
+--       rcases lt_trichotomy i a with hia|rfl|hai,
+--       { have : even (2^a / 2^i),
+--         { rw [even_div, mod_mul_left_div_self, ← dvd_iff_mod_eq_zero],
+--           apply dvd_div_of_mul_dvd,
+--           rw [← nat.pow_succ],
+--           exact pow_dvd_pow _ hia }, sorry,
+--         -- rw [hnm' hia, zero_add, if_neg (not_le_of_gt (mod_lt _ h2p))],
+--         -- simp [*, ne_of_lt hia, ih, hnm' hia] with parity_simps
+--          }, { sorry },
+--       -- { rw [mod_self, zero_add, if_neg (not_le_of_gt (mod_lt _ h2p))],
+--       --   simp [nat.div_self (nat.pow_pos h2p _), nat.mod_self] with parity_simps,
+--       --   finish },--finish },
+--       {
+--         -- have : 2 ^ a + sum s (pow 2) % 2 ^ i = (2 ^ a + sum s (pow 2)) % 2 ^ i,
+--         --   from begin
+--         --     rw [add_mod]
+
+--         --   end,
+--         -- rw [hnm hai, mod_eq_of_lt ((pow_lt_iff_lt_right (le_refl _)).2 hai)],
+--         rw [even_div],
+--         simp [ne_of_gt hai, hnm hai, ih] with parity_simps, },
+--     end)
+
+lemma ith_bit_binary (A : finset ℕ) : ∀ i,
+  i ∈ A ↔ ¬ even (binary A / 2 ^ i) :=
+finset.induction_on A
+  (by simp [binary, ith_bit])
+  (λ a s has ih i,
+    begin
+      dsimp [binary, ith_bit] at *,
+      rw [sum_insert has, mem_insert,
+        nat.add_div (nat.pow_pos (show 0 < 2, from dec_trivial) _)],
+      have hnm : ∀ {n m}, n < m → 2^n / 2^m = 0,
+        from λ n m h, div_eq_of_lt ((pow_lt_iff_lt_right (le_refl _)).2 h),
+      have hnm' : ∀ {n m : ℕ}, n < m → 2^m % 2^n = 0, from sorry,
+      have h2p : ∀ {n : ℕ}, 0 < 2^n, from sorry,
+      rcases lt_trichotomy i a with hia|rfl|hai,
+      { have : even (2^a / 2^i),
+        { rw [even_div, mod_mul_left_div_self, ← dvd_iff_mod_eq_zero],
+          apply dvd_div_of_mul_dvd,
+          rw [← nat.pow_succ],
+          exact pow_dvd_pow _ hia },
+        rw [hnm' hia, zero_add, if_neg (not_le_of_gt (mod_lt _ h2p))],
+        simp [*, ne_of_lt hia, ih, hnm' hia] with parity_simps },
+      { rw [mod_self, zero_add, if_neg (not_le_of_gt (mod_lt _ h2p))],
+        simp [nat.div_self (nat.pow_pos h2p _), nat.mod_self] with parity_simps,
+        finish },--finish },
+      { have : (2 ^ a + sum s (pow 2)) % 2 ^ i < 2 ^ a + sum s (pow 2) % 2 ^ i,
+          from _,
+        rw [hnm hai, mod_eq_of_lt ((pow_lt_iff_lt_right (le_refl _)).2 hai)],
+
+        simp [ne_of_gt hai, hnm hai, ih] with parity_simps, },
+    end)
+
+lemma ith_bit_binary (A : finset ℕ) : ∀ i,
+  i ∈ A ↔ ith_bit (binary A) i = 1 :=
+finset.induction_on A
+  (by simp [binary, ith_bit])
+  (λ a s has ih i, begin
+    dsimp [binary, ith_bit] at *,
+    rw [sum_insert has, mem_insert, nat.add_div],
+    rcases lt_trichotomy i a with hia|rfl|hai,
+    {
+      rw [if_neg, add_zero],
+       }
+
+
+
+
+
+
+  end)
+
+example : function.injective (binary) :=
+function.injective_of_has_left_inverse
+  ⟨λ n, (range n).filter (λ i, n / 2^i ≠ n / 2^(i+1)),
+  λ s, finset.induction_on s
+    (by simp [binary]) $
+    λ a s has ih, begin
+      conv_rhs { rw ← ih },
+      ext i,
+      simp only [binary, sum_insert has, mem_filter, mem_range,
+        mem_insert],
+      split,
+      { assume h,
+         }
+
+
+
+    end⟩
+-- λ s, finset.induction_on s
+--   (λ t h, begin simp [binary] at *, end) $
+-- λ a s has ih t h,
+-- have hat : binary t = binary (insert a (t.erase a)),
+--   from h ▸ congr_arg binary (by finish [finset.ext]),
+-- begin
+--   rw [erase_in]
+
+
+-- end
+
+example (m : nat) : 0 * m = 0 :=
+begin
+  induction m with m ih,
+  rw mul_zero,
+  rw [nat.mul_succ],
+
+
+end
+
+lemma z (a b c : ℝ) : a^3 + b^3 + c^3 - 3 * a * b * c =
+  1/2 * (a + b + c) * ((a - b)^2 + (b - c)^2 + (c - a)^2) := by ring
+
+#print z
+
+#exit
+import data.set.basic
+
+
+example {X : Type} (A B : set X) : A ∩ B = A ∪ B ↔ A = B :=
+⟨λ h, set.ext $ λ x,
+  ⟨λ hA, set.mem_of_subset_of_mem (set.inter_subset_right A B) (h.symm ▸ or.inl hA),
+   λ hB, set.mem_of_subset_of_mem (set.inter_subset_left A B) (h.symm ▸ or.inr hB)⟩,
+  by simp {contextual := tt}⟩
+
+#exit
+import data.int.basic
+
+#print nat_abs
+inductive cool : ℕ → Prop
+| cool_2 : cool 2
+| cool_5 : cool 5
+| cool_sum : ∀ (x y : ℕ), cool x → cool y → cool (x + y)
+| cool_prod : ∀ (x y : ℕ), cool x → cool y → cool (x*y)
+
+example : 7 = sorry :=
+begin
+  dsimp only [bit0, bit1],
+
+end
+
+example : cool 7 := (cool.cool_sum 2 5 cool.cool_2 cool.cool_5 : _)
+
+#exit
+import data.polynomial
+
+variables {R : Type*} [comm_ring R]
+open polynomial
+
+lemma zzzz {u r : R} {n : ℕ} (hr : r^n = 0) (hu : is_unit u) : is_unit (u + r) :=
+have hnegr : (-r)^n = 0, by rw [neg_eq_neg_one_mul, mul_pow, hr, mul_zero],
+have (X - C (-r)) ∣ X ^ n, from dvd_iff_is_root.2 (by simp [is_root, hnegr]),
+is_unit_of_dvd_unit
+  (let ⟨p, hp⟩ := this in ⟨p.eval u, by simpa using congr_arg (eval u) hp⟩)
+  (is_unit_pow n hu)
+
+#print acc.intro
+
+#exit
+import data.zmod.quadratic_reciprocity
+
+@[simp] lemma list.lex_nil_right (l)
+
+#eval @nat.modeq.chinese_remainder 5 8 rfl 4 7
+
+#eval zmodp.legendre_sym 10 71 (by norm_num)
+
+#eval zmodp.legendre_sym 2 71 (by norm_num)
+
+#eval zmodp.legendre_sym 5 71 (by norm_num)
+
+#eval zmodp.legendre_sym 71 5 (by norm_num)
+
+example {α : Type} [nonempty α] (F G : α → Prop)
+  (h : (∃ x, F x) → ∃ x, G x) : ∃ x, F x → G x :=
+begin
+  resetI,
+  classical,
+  cases _inst_1 with a,
+  rcases classical.em (∃ x, G x) with ⟨x, hx⟩ | hx,
+  { exact ⟨x, λ _, hx⟩ },
+  { exact ⟨a, λ hF, (not_exists.1 (not_imp_not.2 h hx) a hF).elim ⟩ }
+end
+
+
+def sum' (f : ℕ → ℕ) : ℕ → ℕ
+| 0     := 0
+| (n+1) := sum' n + f n
+
+
+
+#exit
+import data.equiv.basic group_theory.perm.sign
+#eval nat.choose 8 3
+#eval (finset.range (721)).filter (λ x, x ∣ 720 ∧ x % 7 = 1)
+#eval ((finset.Ico 1 31).powerset.filter
+  (λ s : finset ℕ, s.card = 8 ∧
+    ((s.filter (λ s : finset ℕ, s.card = 4)).1.map
+    (λ s : finset ℕ, s.1.sum)).nodup)
+
+
+open equiv equiv.perm
+variable {α : Type}
+
+open_locale classical
+
+example (f : perm α) (a b : α) :
+  f * swap a b * f⁻¹ = sorry :=
+begin
+  rw [mul_assoc, swap_mul_eq_mul_swap, inv_inv],
+  simp,
+end
+
+#exit
+inductive tree : Type
+| lf : tree
+| nd : tree -> nat -> tree -> tree
+
+open tree
+
+def fusion : tree -> tree -> tree
+| lf t2 := t2
+| t1 lf := t1
+| (nd l1 x1 r1) (nd l2 x2 r2) :=
+    if x1 ≤ x2
+    then nd (fusion r1 (nd l2 x2 r2)) x1 l1
+    else nd (fusion (nd l1 x1 r1) r2) x2 l2
+-- using_well_founded { rel_tac := λ _ _,
+--     `[exact ⟨_, measure_wf (λ t, tree.sizeof t.1 + tree.sizeof t.2)⟩] }
+
+#print fusion._main._pack.equations._eqn_1
+
+theorem fusion_lf : ∀ (t : tree), fusion lf lf = lf :=
+λ _, rfl
+
+example  (t : tree) : fusion t lf = lf :=
+by cases t; refl
+#exit
+import data.real.nnreal
+
+#print xor
+
+example : (∀ p q r, xor (xor p q) r ↔ xor p (xor q r)) → ∀ p, p ∨ ¬p :=
+λ h p,
+((h p p true).1
+    (or.inr ⟨trivial, λ h, h.elim (λ h, h.2 h.1) (λ h, h.2 h.1)⟩)).elim
+  (λ h, or.inl h.1)
+  (λ h, or.inr h.2)
+
+example : (∀ p q, xor p q ↔ (p ∨ q) ∧ ¬(p ∧ q)) :=
+λ p q, ⟨λ h, h.elim (λ h, ⟨or.inl h.1, λ h1, h.2 h1.2⟩)
+    (λ h, ⟨or.inr h.1, λ h1, h.2 h1.1⟩),
+  (λ h, h.1.elim
+    (λ hp, or.inl ⟨hp, λ hq, h.2 ⟨hp, hq⟩⟩)
+    (λ hq, or.inr ⟨hq, λ hp, h.2 ⟨hp, hq⟩⟩))⟩
+
+example : (∀ p q r, ((p ↔ q) ↔ r) ↔ (p ↔ (q ↔ r))) → ∀ p, p ∨ ¬p :=
+λ h p,
+  ((h (p ∨ ¬p) false false).1
+      ⟨λ h, h.1 (or.inr (λ hp, h.1 (or.inl hp))), false.elim⟩).2
+    iff.rfl
+
+inductive pre_free_group (α : Type) : Type
+| atom : α → pre_free_group
+| one : pre_free_group
+| mul : pre_free_group → pre_free_group → pre_free_group
+| inv : pre_free_group → pre_free_group
+
+namespace pre_free_group
+
+variable {α : Type}
+
+instance : has_one (pre_free_group α) := ⟨pre_free_group.one _⟩
+instance : has_mul (pre_free_group α) := ⟨pre_free_group.mul⟩
+instance : has_inv (pre_free_group α) := ⟨pre_free_group.inv⟩
+
+lemma mul_def : (*) = @pre_free_group.mul α := rfl
+lemma one_def : 1 = @pre_free_group.one α := rfl
+lemma inv_def : has_inv.inv = @pre_free_group.inv α := rfl
+
+inductive rel : Π (a b : pre_free_group α), Prop
+| mul_assoc : ∀ a b c, rel ((a * b) * c) (a * (b * c))
+| one_mul : ∀ a, rel (1 * a) a
+| mul_one : ∀ a, rel (a * 1) a
+| mul_left_inv : ∀ a, rel (a⁻¹ * a) 1
+| mul_lift : ∀ a b c d, rel a b → rel c d → rel (a * c) (b * d)
+| inv_lift : ∀ a b, rel a b → rel (a⁻¹) (b⁻¹)
+| refl : ∀ a, rel a a
+| symm : ∀ a b, rel a b → rel b a
+| trans : ∀ a b c, rel a b → rel b c → rel a c
+
+instance (α : Type) : setoid (pre_free_group α) :=
+{ r := rel,
+  iseqv := ⟨rel.refl, rel.symm, rel.trans⟩ }
+
+end pre_free_group
+
+def free_group (α : Type) := quotient (pre_free_group.setoid α)
+
+namespace free_group
+open pre_free_group
+
+variable {α : Type}
+
+instance : group (free_group α) :=
+{ one := ⟦1⟧,
+  mul := λ a b, quotient.lift_on₂ a b (λ a b, ⟦a * b⟧)
+    (λ a b c d h₁ h₂, quotient.sound (rel.mul_lift _ _ _ _ h₁ h₂)),
+  inv := λ a, quotient.lift_on a (λ a, ⟦a⁻¹⟧)
+    (λ a b h, quotient.sound (rel.inv_lift _ _ h)),
+  mul_assoc := λ a b c, quotient.induction_on₃ a b c
+    (λ a b c, quotient.sound (rel.mul_assoc _ _ _)),
+  one_mul := λ a, quotient.induction_on a
+    (λ a, quotient.sound (rel.one_mul a)),
+  mul_one := λ a, quotient.induction_on a
+    (λ a, quotient.sound (rel.mul_one a)),
+  mul_left_inv := λ a, quotient.induction_on a
+    (λ a, quotient.sound (rel.mul_left_inv _)) }
+
+def atom (a : α) : free_group α := ⟦pre_free_group.atom a⟧
+
+variables {G : Type} [group G]
+
+def lift (G : Type) [group G] (f : α → G) : free_group α →* G :=
+{ to_fun := λ a, quotient.lift_on a
+    (λ a, show G, from pre_free_group.rec_on a f 1 (λ _ _, (*)) (λ _ g, g⁻¹))
+    (λ a b h, begin
+      dsimp,
+      induction h;
+      try { dsimp [mul_def, inv_def, one_def] };
+      simp [mul_assoc, *] at *,
+    end),
+  map_one' := rfl,
+  map_mul' := λ a b, quotient.induction_on₂ a b (λ _ _, rfl) }
+
+lemma one_def : (1 : free_group α) = ⟦pre_free_group.one α⟧ := rfl
+lemma mul_def {a b : pre_free_group α} :
+  @eq (free_group α) ⟦pre_free_group.mul a b⟧ (⟦a⟧ * ⟦b⟧) := rfl
+lemma inv_def {a : pre_free_group α} :
+  @eq (free_group α) ⟦pre_free_group.inv a⟧ (⟦a⟧⁻¹) := rfl
+
+@[simp] lemma mk_apply {α β : Type*} [monoid α] [monoid β] (f : α → β) (h₁ h₂) (a : α) :
+  monoid_hom.mk f h₁ h₂ a = f a := rfl
+
+@[simp] lemma lift_atom (f : α → G) (a : α) : lift G f (atom a) = f a := rfl
+
+lemma lift_unique (f : α → G) (φ : free_group α →* G) (h : ∀ a, φ (atom a) = f a)
+  (g : free_group α) : φ g = lift G f g :=
+quotient.induction_on g
+  (λ a, begin
+    dsimp [atom, lift] at *,
+    induction a;
+    simp [*, one_def.symm, mul_def, inv_def] at *;
+    refl,
+  end)
+
+end free_group
+
+#exit
+import algebra.free
+
+universe u
+
+inductive pre_free_ring (α : Type u) : Type u
+| atom : α → pre_free_ring
+| zero : pre_free_ring
+| one : pre_free_ring
+| neg : pre_free_ring → pre_free_ring
+| mul : pre_free_ring → pre_free_ring → pre_free_ring
+| add : pre_free_ring → pre_free_ring → pre_free_ring
+
+namespace pre_free_ring
+
+variable {α : Type u}
+
+instance : has_zero (pre_free_ring α) := ⟨pre_free_ring.zero _⟩
+instance : has_one (pre_free_ring α) := ⟨pre_free_ring.one _⟩
+instance : has_neg (pre_free_ring α) := ⟨pre_free_ring.neg⟩
+instance : has_mul (pre_free_ring α) := ⟨pre_free_ring.mul⟩
+instance : has_add (pre_free_ring α) := ⟨pre_free_ring.add⟩
+
+inductive rel : Π (a b : pre_free_ring α), Prop
+| add_assoc : ∀ a b c, rel (a + b + c) (a + (b + c))
+| zero_add : ∀ a, rel (0 + a) a
+| add_zero : ∀ a, rel (a + 0) a
+| add_left_neg : ∀ a, rel (-a + a) 0
+| add_comm : ∀ a b, rel (a + b) (b + a)
+| mul_assoc : ∀ a b c, rel (a * b * c) (a * (b * c))
+| one_mul : ∀ a, rel (1 * a) a
+| mul_one : ∀ a, rel (a * 1) a
+| left_distrib : ∀ a b c, rel (a * (b + c)) (a * b + a * c)
+| right_distrib : ∀ a b c, rel ((a + b) * c) (a * c + b * c)
+| add_lift : ∀ a b c d, rel a b → rel c d → rel (a + c) (b + d)
+| mul_lift : ∀ a b c d, rel a b → rel c d → rel (a * c) (b * d)
+| neg_lift : ∀ a b, rel a b → rel (-a) (-b)
+| refl : ∀ a, rel a a
+| symm : ∀ a b, rel a b → rel b a
+| trans : ∀ a b c, rel a b → rel b c → rel a c
+
+instance (α : Type u) : setoid (pre_free_ring α) :=
+{ r := rel,
+  iseqv := ⟨rel.refl, rel.symm, rel.trans⟩ }
+
+end pre_free_ring
+
+variable {α : Type u}
+
+def free_ring (α : Type u) := quotient (pre_free_ring.setoid α)
+
+namespace free_ring
+
+open pre_free_ring
+
+instance : ring (free_ring α) :=
+{ zero := quotient.mk' 0,
+  one := quotient.mk' 1,
+  add := λ a b, quotient.lift_on₂ a b (λ a b, quotient.mk (a + b))
+    (λ a b c d h₁ h₂, quot.sound (rel.add_lift _ _ _ _ h₁ h₂)),
+  mul := λ a b, quotient.lift_on₂ a b (λ a b, quotient.mk (a * b))
+    (λ a b c d h₁ h₂, quot.sound (rel.mul_lift _ _ _ _ h₁ h₂)),
+  add_assoc := λ a b c, quotient.induction_on₃ a b c
+    (λ a b c, quot.sound (rel.add_assoc _ _ _)),
+  mul_assoc := λ a b c, quotient.induction_on₃ a b c
+    (λ a b c, quot.sound (rel.mul_assoc _ _ _)),
+  zero_add := λ a, quotient.induction_on a (λ a, quot.sound (rel.zero_add a)),
+  add_zero := λ a, quotient.induction_on a (λ a, quot.sound (rel.add_zero a)),
+  neg := λ a, quotient.lift_on a (λ a, quotient.mk (-a))
+    (λ a b h, quot.sound (rel.neg_lift _ _ h)),
+  add_left_neg := λ a, quotient.induction_on a
+    (λ a, quot.sound (rel.add_left_neg _)),
+  add_comm := λ a b, quotient.induction_on₂ a b
+    (λ a b, quotient.sound (rel.add_comm _ _)),
+  one_mul := λ a, quotient.induction_on a (λ a, quot.sound (rel.one_mul a)),
+  mul_one := λ a, quotient.induction_on a (λ a, quot.sound (rel.mul_one a)),
+  left_distrib := λ a b c, quotient.induction_on₃ a b c
+    (λ a b c, quot.sound (rel.left_distrib _ _ _)),
+  right_distrib := λ a b c, quotient.induction_on₃ a b c
+    (λ a b c, quot.sound (rel.right_distrib _ _ _)) }
+
+def atom : α → free_ring α := λ a, ⟦atom a⟧
+
+#print linear_ordered_ring
+#print
+inductive le : free_ring bool → free_ring bool → Prop
+| atom : le (atom ff) (atom tt)
+| refl : ∀ x, le x x
+| trans : ∀ a b c, le a b → le b c → le a c
+| add_le_add_left :
+
+
+#exit
+import group_theory.subgroup algebra.commute
+
+lemma X {α : Type} {φ : α → Prop}: (¬ ∃ v, φ v) ↔ (∀ v, ¬ φ v) :=
+⟨λ ex v hv, ex ⟨v, hv⟩, Exists.rec⟩
+
+#exit
+
+open equiv
+variables {G : Type*} [group G]
+#print equiv.ext
+def L (g : G) : perm G := ⟨λ h, g * h, λ h, g⁻¹ * h, λ _, by simp, λ _, by simp⟩
+
+def R (g : G) : perm G := ⟨λ h, h * g⁻¹, λ h, h * g, λ _, by simp, λ _, by simp⟩
+
+lemma perm.ext_iff {f g : perm G} : f = g ↔ ∀ x, f x = g x :=
+⟨λ h x, by rw h, equiv.perm.ext _ _⟩
+
+lemma forall_mem_range {α β : Type*} {p : β → Prop} {f : α → β} :
+  (∀ x ∈ set.range f, p x) ↔ (∀ x, p (f x)) :=
+⟨λ h x, h _ (set.mem_range_self _), by rintros h x ⟨y, rfl⟩; exact h _⟩
+
+lemma question_4 : set.centralizer (set.range L : set (perm G)) = set.range R :=
+calc set.centralizer (set.range L) = { σ  : perm G | ∀ g g₁, σ (g * g₁) = g * σ g₁ } :
+  by simp only [set.ext_iff, commute, semiconj_by, set.centralizer, forall_mem_range, perm.ext_iff];
+    tauto
+... = set.range R : set.ext $ λ f,
+  ⟨λ h, ⟨(f 1)⁻¹, perm.ext_iff.2 $ λ x, by dsimp [R]; rw [inv_inv, ← h, mul_one]⟩,
+    by rintros ⟨g, rfl⟩; simp [R, mul_assoc]⟩
+
+#print Z
+-- set.subset.antisymm
+--   (λ f h, ⟨(f 1)⁻¹, perm.ext_iff.2 $ λ x, begin
+--     have := h (L (f 1)) (set.mem_range_self _) ,
+--     simp [commute, semiconj_by, L, R, perm.ext_iff] at *,
+
+
+--   end⟩ )
+  -- (λ f, by rintros ⟨g, rfl⟩ f ⟨h, rfl⟩;
+  --   simp [set.centralizer, L, R, perm.ext_iff, commute, semiconj_by, mul_assoc])
+
+
+
+instance : is_subgroup
+
+#exit
+import data.complex.basic tactic.norm_num tactic.ring
+
+lemma X (a b : ℤ) (n : ℕ) : (a + b)^(n + 2) =
+  (a^2 + 2 * a * b + b^2) * (a + b)^n :=
+by simp only [pow_add]; ring
+#print X
+example (n : nat) (m : int) : 2^(n+1) * m = 2 * 2^n * m :=
+by simp only [pow_add]; ring
+
+#eval ((∘) ∘ (∘)) (+) (*) 13 11 20
+#eval (∘) ((∘) (+)) (*) 13 11 20
+#eval (((∘) (+)) ∘ (*)) 13 11 20
+#eval ((∘) (+)) (* 13) 11 20
+#eval ((+) ∘ (* 13)) 11 20
+#eval (+) (11 * 13) 20
+#eval (11 * 13) + 20
+
+example {X Y : Type*} : Π [nonempty X] [nonempty Y], nonempty (X × Y)
+| ⟨x⟩ ⟨y⟩ := ⟨(x, y)⟩
+
+#exit
+import data.real.basic order.conditionally_complete_lattice
+instance : lattice.conditionally_complete_linear_order_bot (with_bot ℝ) :=
+by apply_instance
+
+import data.zsqrtd.gaussian_int
+
+#eval ((finset.range 200).filter
+  (λ x, ∃ a b : fin (x + 1), a.1^2 + b.1^2 = x)).sort (≤)
+
+₄
+notation `ℤ[i]` := gaussian_int
+
+open euclidean_domain
+#eval nat.factors (8 * 74 + 2)
+#eval gcd (⟨557, 55⟩ : ℤ[i]) 12049
+#eval 32 ^ 2 + 105 ^ 2
+
+
+#exit
+
+import tactic.omega data.nat.modeq
+
+inductive C : Type
+| c1 : C
+| c2 : C
+
+inductive D : Type
+| d1 : D
+| d2 : D
+
+def thing1 (c : C) (d : D) : D :=
+c.rec
+  (_) -- correct "don't know how to synthesize placeholder -- here's a helpful context"
+  (_) -- correct
+
+def thing2 (c : C) (d : D) : D :=
+C.rec_on c
+  (D.rec_on d _ _ )
+  (_)
+
+open nat
+example (n : fin 70) : n % 7 = (n / 10 + 5 * (n % 10)) % 7 :=
+begin
+revert n,
+exact dec_trivial,
+
+end
+
+example (n : ℤ) (d : ℕ) (h : (2 : ℚ) * (d * d : ℤ) = ((n * n : ℤ) : ℚ)) :
+  2 * ((d : ℤ) * (d : ℤ)) = n * n :=
+begin
+  rw [← @int.cast_inj ℚ],
+end
+
+#exit
+import analysis.normed_space.basic
+open metric
+variables
+{V : Type*} [normed_group V] [complete_space V] [normed_space ℝ V]
+
+def B' : set V := closed_ball 0 1
+
+example : B' ⊆ ⋃ (a : V) (H : a ∈ (B' : set V)), ball a 0.5 :=
+begin
+  sorry
+end
+
+#exit
+
+theorem add_comm (a b : ℕ) : begin
+  apply eq,
+  apply ((+) : ℕ → ℕ → ℕ),
+  apply a,
+  apply b,
+  apply ((+) : ℕ → ℕ → ℕ),
+  apply b,
+  apply a,
+end
+
+#exit
+import data.fintype
+
+#eval (@finset.univ (fin 100 × fin 100 × fin 100) _).filter
+  (λ k : fin 100 × fin 100 × fin 100, (k.1.1 ^ k.2.1.1 + 1) ∣ (k.1.1 + 1 : ℕ)^k.2.2.1
+     ∧ k.1.1 > 1 ∧ k.2.1.1 > 1 ∧ k.2.2.1 > 1)
+
+--import data.zmod.basic data.zmod.quadratic_reciprocity
+
+example {k : ℕ+} (h : (3 ^ (2 ^ ((k - 1) : ℕ) : ℕ) :
+  zmod (2 ^ (2 ^ (k : ℕ)) + 1)) = -1) : nat.prime (2 ^ (2 ^ (k : ℕ)) + 1) :=
+let n : ℕ+ := ⟨3 ^ (2 ^ ((k - 1) : ℕ) : ℕ) + 1, nat.succ_pos _⟩ in
+have p3 : nat.prime 3, by norm_num,
+have cp3n : nat.coprime 3 n,
+  begin
+    dsimp [n, nat.coprime],
+    erw [nat.gcd_rec, ← zmodp.val_cast_nat p3 (3 ^ 2 ^ (k - 1 : ℕ) + 1)],
+    simp [zero_pow (nat.pow_pos (show 0 < 2, from dec_trivial) _)]
+  end,
+let u3 : units (zmod n) := (@zmod.units_equiv_coprime n).symm ⟨3, sorry⟩ in
+have h3 : u3 ^ (n : ℕ) = 1, from _,
+begin
+
+
+
+end
+
+
+import data.fintype
+
+variable {α : Type*}
+
+open finset
+
+theorem fintype.card_subtype_lt [fintype α] (p : α → Prop) [decidable_pred p]
+  {x : α} (hx : ¬ p x) : fintype.card {x // p x} < fintype.card α :=
+by rw [fintype.subtype_card]; exact finset.card_lt_card
+  ⟨subset_univ _, classical.not_forall.2 ⟨x, by simp [*, set.mem_def]⟩⟩
+
+#exit
+import data.zmod.basic data.polynomial
+
+open polynomial
+
+
+
+
+
+inductive T : ℕ → Type
+| mk : Π (n m : ℕ) (t : T m) (f : Π {n : ℕ}, T n), T n
+
+#print T.rec
+
+set_option trace.simplify.rewrite true
+
+
+
+
+
+#print X
+
+import data.nat.prime
+
+open nat
+
+lemma min_fac_le_div {n : ℕ} (pos : 0 < n) (np : ¬ prime n) : min_fac n ≤ n / min_fac n :=
+match min_fac_dvd n with
+| ⟨0, h0⟩     := absurd pos $ by rw [h0, mul_zero]; exact dec_trivial
+| ⟨1, h1⟩     := begin
+  rw mul_one at h1,
+  rw [prime_def_min_fac, not_and_distrib, ← h1, eq_self_iff_true, not_true, or_false, not_le] at np,
+  rw [le_antisymm (le_of_lt_succ np) (succ_le_of_lt pos), min_fac_one, nat.div_one]
+end
+| ⟨(x+2), hx⟩ := begin
+  conv_rhs { congr, rw hx },
+  rw [nat.mul_div_cancel_left _ (min_fac_pos _)],
+  exact min_fac_le_of_dvd dec_trivial ⟨min_fac n, by rwa mul_comm⟩
+end
+
+
+
+#exit
+
+import tactic.finish
+
+lemma X (p : Prop): ¬(p ↔ ¬ p) := by ifinish
+#print X
+open multiset function
+
+lemma eq_zero_iff_forall_not_mem {α : Type*} {s : multiset α} : s = 0 ↔ ∀ a, a ∉ s :=
+⟨λ h, h.symm ▸ λ _, not_false, eq_zero_of_forall_not_mem⟩
+
+lemma map_eq_map {α β γ : Type*} (f : α → γ) (g : β → γ) {s : multiset α}
+  (hs : s.nodup) {t : multiset β} (ht : t.nodup) (i : Πa∈s, β)
+  (hi : ∀a ha, i a ha ∈ t) (h : ∀a ha, f a = g (i a ha))
+  (i_inj : ∀a₁ a₂ ha₁ ha₂, i a₁ ha₁ = i a₂ ha₂ → a₁ = a₂) (i_surj : ∀b∈t, ∃a ha, b = i a ha) :
+  s.map f = t.map g :=
+have t = s.attach.map (λ x, i x.1 x.2),
+  from (nodup_ext ht (nodup_map
+      (show injective (λ x : {x // x ∈ s}, i x.1 x.2), from λ x y hxy,
+        subtype.eq (i_inj x.1 y.1 x.2 y.2 hxy))
+      (nodup_attach.2 hs))).2
+    (λ x, by simp only [mem_map, true_and, subtype.exists, eq_comm, mem_attach];
+      exact ⟨i_surj _, λ ⟨y, hy⟩, hy.snd.symm ▸ hi _ _⟩),
+calc s.map f = s.pmap  (λ x _, f x) (λ _, id) : by rw [pmap_eq_map]
+... = s.attach.map (λ x, f x.1) : by rw [pmap_eq_map_attach]
+... = t.map g : by rw [this, multiset.map_map]; exact map_congr (λ x _, h _ _)
+
+#exit
+import tactic.ring
+
+example (p : ℕ) : p / 2 * (p / 2) + p / 2 * (p / 2) + p % 2 * (p % 2) +
+  (2 * (p / 2 * (p / 2)) + 4 * (p / 2) * (p % 2)) =
+    (p % 2 + 2 * (p / 2)) * (p % 2 + 2 * (p / 2)) :=
+begin
+ ring,
+
+end
+
+example (n : ℕ) : n + n = 2 * n := by ring
+
+
 import data.nat.prime
 
 inductive option' (α : Sort*) : Sort*
@@ -10,27 +1318,27 @@ def zmod (n : ℕ) (h : option' n.prime := option'.none) : Type := fin n
 import data.zmod.basic algebra.euclidean_domain
 
 def remainder_aux (a b : ℤ) : ℤ :=
-if hb : b = 0 then a 
+if hb : b = 0 then a
 else (a : zmod ⟨b.nat_abs, int.nat_abs_pos_of_ne_zero hb⟩).val_min_abs
 
 def X : euclidean_domain ℤ :=
 { remainder := remainder_aux,
   quotient := λ a b, (a - remainder_aux a b) / b,
   quotient_zero := by simp [remainder_aux],
-  quotient_mul_add_remainder_eq := λ a b, 
+  quotient_mul_add_remainder_eq := λ a b,
     begin
       rw [remainder_aux, int.mul_div_cancel', sub_add_cancel],
       split_ifs with hb,
       { simp },
-      { erw [← int.nat_abs_dvd, 
+      { erw [← int.nat_abs_dvd,
           ← @zmod.eq_zero_iff_dvd_int ⟨b.nat_abs, int.nat_abs_pos_of_ne_zero hb⟩],
         simp }
     end,
   r := λ x y, x.nat_abs < y.nat_abs,
   r_well_founded := measure_wf _,
-  remainder_lt := λ a b hb0, 
+  remainder_lt := λ a b hb0,
     by rw [remainder_aux, dif_neg hb0];
-      exact lt_of_le_of_lt (zmod.nat_abs_val_min_abs_le _) (nat.div_lt_self 
+      exact lt_of_le_of_lt (zmod.nat_abs_val_min_abs_le _) (nat.div_lt_self
         (int.nat_abs_pos_of_ne_zero hb0) dec_trivial),
   mul_left_not_lt := λ a b hb0, not_lt_of_le $
     by rw [int.nat_abs_mul];

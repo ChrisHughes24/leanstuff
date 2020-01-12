@@ -120,53 +120,6 @@ let ⟨a, b, hab⟩ := exists_root_sum_quadratic (-X^2 : polynomial (zmodp p hp)
   (degree_X_pow_sub_C dec_trivial _) (by simp *) in
 ⟨a, b, by simpa using hab⟩
 
-def zmod.val_min_abs {n : ℕ+} (x : zmod n) : ℤ :=
-if x.val ≤ n / 2 then x.val else x.val - n
-
-@[simp] lemma zmod.coe_val_min_abs {n : ℕ+} (x : zmod n) :
-  (x.val_min_abs : zmod n) = x :=
-by simp [zmod.val_min_abs]; split_ifs; simp
-
-lemma zmod.nat_abs_val_min_abs_le {n : ℕ+} (x : zmod n) :
-  x.val_min_abs.nat_abs ≤ n / 2 :=
-have (x.val - n : ℤ) ≤ 0, from sub_nonpos.2 $ int.coe_nat_le.2 $ le_of_lt x.2,
-begin
-  rw zmod.val_min_abs,
-  split_ifs with h,
-  { exact h },
-  { rw [← int.coe_nat_le, int.of_nat_nat_abs_of_nonpos this, neg_sub],
-    conv_lhs { congr, rw [coe_coe, ← nat.mod_add_div n 2, int.coe_nat_add, int.coe_nat_mul,
-      int.coe_nat_bit0, int.coe_nat_one] },
-    rw ← sub_nonneg,
-    suffices : (0 : ℤ) ≤ x.val - ((n % 2 : ℕ) + (n / 2 : ℕ)),
-    { exact le_trans this (le_of_eq $ by ring) },
-    exact sub_nonneg.2 (by rw [← int.coe_nat_add, int.coe_nat_le];
-      exact calc (n : ℕ) % 2 + n / 2 ≤ 1 + n / 2 :
-        add_le_add (nat.le_of_lt_succ (nat.mod_lt _ dec_trivial)) (le_refl _)
-        ... ≤ x.val : by rw add_comm; exact nat.succ_le_of_lt (lt_of_not_ge h)) }
-end
-
-@[simp] lemma zmod.val_min_abs_zero {n : ℕ+} : (0 : zmod n).val_min_abs = 0 :=
-by simp [zmod.val_min_abs]
-
-@[simp] lemma zmod.val_min_abs_eq_zero {n : ℕ+} (x : zmod n) :
-  x.val_min_abs = 0 ↔ x = 0 :=
-⟨λ h, begin
-  dsimp [zmod.val_min_abs] at h,
-  split_ifs at h,
-  { exact fin.eq_of_veq (by simp * at *) },
-  { exact absurd h (mt sub_eq_zero.1 (ne_of_lt $ int.coe_nat_lt.2 x.2)) }
-end, λ hx0, hx0.symm ▸ zmod.val_min_abs_zero⟩
-
-def zmodp.val_min_abs {p : ℕ} {hp : p.prime} : zmodp p hp → ℤ := zmod.val_min_abs
-
-@[simp] lemma zmodp.coe_val_min_abs {p : ℕ} (hp : p.prime) (x : zmodp p hp) :
-  (x.val_min_abs : zmodp p hp) = x := @zmod.coe_val_min_abs ⟨p, hp.pos⟩ x
-
-lemma zmodp.nat_abs_val_min_abs_le {p : ℕ} {hp : p.prime} (x : zmodp p hp) :
-  x.val_min_abs.nat_abs ≤ p / 2 :=
-zmod.nat_abs_val_min_abs_le _
-
 lemma exists_sum_two_squares_add_one_eq_k {p : ℕ} (hp : p.prime) (hp1 : p % 2 = 1) :
   ∃ (a b : ℤ) (k : ℕ), a^2 + b^2 + 1 = k * p ∧ k < p :=
 let ⟨a, b, hab⟩ := neg_one_sum_two_squares_mod_p hp in
@@ -194,7 +147,7 @@ have hk0 : 0 ≤ k, from nonneg_of_mul_nonneg_left
           exact (lt_add_iff_pos_right _).2
             (add_pos_of_nonneg_of_pos (nat.zero_le _) (mul_pos dec_trivial
               (nat.div_pos hp.two_le dec_trivial)))
-      ... = _ : begin
+      ... = p * p : begin
         conv_rhs { rw [← nat.mod_add_div p 2] },
         simp only [nat.pow_two],
         rw [← int.coe_nat_inj'],
