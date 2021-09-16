@@ -1,50 +1,9 @@
-/-
-Copyright (c) 2018 Chris Hughes. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Chris Hughes
--/
 
-import algebra.big_operators data.real.cau_seq tactic.ring algebra.archimedean data.nat.choose analysis.limits .disjoint_finset
+import algebra.big_operators
 
-open nat is_absolute_value finset
+open nat finset
 
-variables {α : Type*} {β : Type*} (f g : ℕ → α) (n m : ℕ)
-
-local infix `^` := monoid.pow
-
-section sum_range
-variable [add_comm_monoid α]
-
-lemma sum_range_succ : (range (succ n)).sum f = f n + (range n).sum f :=
-have h : n ∉ finset.range n := by rw finset.mem_range; exact lt_irrefl _,
-by rw [finset.range_succ, finset.sum_insert h]
-
-lemma sum_range_succ' : ∀ n : ℕ, f ∑ succ n = (λ m, f (succ m)) ∑ n + f 0
-| 0        := by simp
-| (succ n) := by rw [sum_range_succ (λ m, f (succ m)), add_assoc, ← sum_range_succ'];
-                 exact sum_range_succ _ _
-
-
-lemma sum_range_comm : f ∑ n = (λ m, f (n - (succ m))) ∑ n :=
-begin
-  induction n with n hi,
-  { simp },
-  { rw [sum_range_succ, sum_range_succ', hi, succ_sub_one, add_comm],
-    simp [succ_sub_succ] }
-end
-
-lemma sum_range_diag_flip1 (f : ℕ → ℕ → α) : 
-    (range n).sum (λ m, (range (m+1)).sum (λ k, f k (m - k))) = 
-    (range n).sum (λ m, (range (n - m)).sum (f m)) :=
-let f' : ℕ → ℕ → α := λ m k, if m + k < n then f m k else 0 in
-calc (range n).sum (λ m, (range (m+1)).sum (λ k, f k (m - k))) = 
-    (range n).sum (λ m, (range n).sum (λ k, f' k (m - k))) : 
-    sum_congr rfl (λ x hx, begin end)
-
-def h (f : ℕ → ℕ → α) := @sum_sigma ℕ α _ (λ m, ℕ) (range n) (λ m, range (succ m)) 
-        (λ a, f a.2 (a.1 - a.2))
-#print coe_image
-lemma sum_range_diag_flip2 (f : ℕ → ℕ → α) : 
+lemma  {α : Type*} [add_comm_monoid α] (f : ℕ → ℕ → α) (n : ℕ) : 
     (range n).sum (λ m, (range (m + 1)).sum (λ k, f k (m - k))) = 
     (range n).sum (λ m, (range (n - m)).sum (f m)) :=
 have h₁ : ((range n).sigma (range ∘ succ)).sum
@@ -52,7 +11,7 @@ have h₁ : ((range n).sigma (range ∘ succ)).sum
     (range n).sum (λ m, (range (m + 1)).sum
     (λ k, f k (m - k))) := sum_sigma,
 have h₂ : ((range n).sigma (λ m, range (n - m))).sum (λ a : Σ (m : ℕ), ℕ, f (a.1) (a.2)) =
-    (range n).sum (λ m, sum (range (n - m)) (f m)) := sum_sigma,
+    (range n).sum (λ m, (range (n - m)).sum (f m)) := sum_sigma,
 h₁ ▸ h₂ ▸ sum_bij 
 (λ a _, ⟨a.2, a.1 - a.2⟩)
 (λ a ha, have h₁ : a.1 < n := mem_range.1 (mem_sigma.1 ha).1,
@@ -73,8 +32,7 @@ h₁ ▸ h₂ ▸ sum_bij
 (λ ⟨a₁, a₂⟩ ha,
   have ha : a₁ < n ∧ a₂ < n - a₁ := 
       ⟨mem_range.1 (mem_sigma.1 ha).1, (mem_range.1 (mem_sigma.1 ha).2)⟩,
-  ⟨⟨a₂ + a₁, a₁⟩, ⟨mem_sigma.2 ⟨mem_range.2 ((nat.lt_sub_right_iff_add_lt 
-      (le_of_lt ha.1)).1 ha.2),
+  ⟨⟨a₂ + a₁, a₁⟩, ⟨mem_sigma.2 ⟨mem_range.2 (by omega),
     mem_range.2 (lt_succ_of_le (le_add_left _ _))⟩, 
   sigma.mk.inj_iff.2 ⟨rfl, heq_of_eq (nat.add_sub_cancel _ _).symm⟩⟩⟩)
   

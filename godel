@@ -1,0 +1,51 @@
+-- Diagonal Lemma
+
+
+
+
+
+variables
+  (formula : Type)
+  (T_proves : formula → Prop)
+  (provable : formula → formula)
+  (implies : formula → formula → formula)
+  (himplies : ∀ {φ ψ}, T_proves (implies φ ψ) → T_proves φ → T_proves ψ)
+  (and : formula → formula → formula)
+  (handl : ∀ {φ ψ}, T_proves (and φ ψ) → T_proves φ)
+  (handr : ∀ {φ ψ}, T_proves (and φ ψ) → T_proves ψ)
+  (false : formula)
+  (hcons : ¬ T_proves false)
+  (h1 : ∀ {φ}, T_proves φ → T_proves (provable φ))
+  (h2 : ∀ {φ ψ}, T_proves (implies (provable (implies φ ψ))
+    (implies (provable φ) (provable ψ))))
+  (h3 : ∀ {φ}, T_proves (provable φ) → T_proves φ)
+  (ρ : formula)
+  (hρ : T_proves (and (implies ρ (implies (provable ρ) false))
+    (implies (implies ρ false) (provable ρ))))
+
+include formula T_proves provable implies and false h1 h3 ρ hρ
+
+lemma rho_not_provable : ¬ T_proves ρ :=
+assume h : T_proves ρ,
+have T_proves_not_provable_ρ : T_proves (implies (provable ρ) false),
+  from himplies (handl hρ) h,
+have T_proves_provable_ρ : T_proves (provable ρ),
+  from h1 h,
+have T_proves_false : T_proves false,
+  from himplies T_proves_not_provable_ρ T_proves_provable_ρ,
+hcons T_proves_false
+
+lemma not_rho_not_provable : ¬ T_proves (implies ρ false) :=
+assume h : T_proves (implies ρ false),
+have T_proves_provable_ρ : T_proves (provable ρ),
+  from himplies (handr hρ) h,
+have T_proves_ρ : T_proves ρ,
+  from h3 T_proves_provable_ρ,
+have T_proves_false : T_proves false,
+  from himplies h T_proves_ρ,
+hcons T_proves_false
+
+lemma godel2 : ¬ T_proves (implies (provable false) false) :=
+assume h : T_proves (implies (provable false) false),
+have hφ : ∀ {φ}, T_proves (implies (provable (implies φ false)) (implies (provable φ) false)),
+  from λ phi, _

@@ -1,3 +1,4778 @@
+import data.set.function
+import data.fintype.basic
+import data.finset.basic
+import data.fin
+import tactic
+
+
+open finset function
+
+@[derive fintype, derive decidable_eq]
+structure cell := (r : fin 9) (c : fin 9)
+
+def row (i : fin 9) : finset cell := filter (λ a, a.r = i) univ
+def col (i : fin 9) : finset cell := filter (λ a, a.c = i) univ
+def box (i : fin 9) : finset cell := filter (λ a, a.r / 3 = i / 3 ∧ a.c / 3 = i % 3) univ
+
+lemma mem_row (a : cell) (i : fin 9) : a ∈ row i ↔ a.r = i := by simp [row]
+lemma mem_col (a : cell) (i : fin 9) : a ∈ col i ↔ a.c = i := by simp [col]
+lemma mem_box (a : cell) (i j : fin 3) :
+  a ∈ box i ↔ a.r / 3 = i / 3 ∧ a.c / 3 = i % 3 := by simp [box]
+
+def same_row (a : cell) (b : cell) := a.r = b.r
+def same_col (a : cell) (b : cell) := a.c = b.c
+def same_box (a : cell) (b : cell) := (a.r / 3) = (b.r / 3) ∧ (a.c / 3) = (b.c / 3)
+
+def cell_row (a : cell) : finset cell := row (a.r)
+def cell_col (a : cell) : finset cell := col (a.c)
+def cell_box (a : cell) : finset cell := box (3*(a.r / 3) + a.c / 3)
+
+@[derive fintype, derive decidable_eq] 
+def sudoku := cell → fin 9
+
+def row_axiom (s : sudoku) : Prop := ∀ a b : cell, same_row a b → s a = s b → a = b
+def col_axiom (s : sudoku) : Prop := ∀ a b : cell, same_col a b → s a = s b → a = b
+def box_axiom (s : sudoku) : Prop := ∀ a b : cell, same_box a b → s a = s b → a = b
+
+def normal_sudoku_rules (s : sudoku) : Prop := row_axiom s ∧ col_axiom s ∧ box_axiom s
+
+@[simp] lemma card_row : ∀ (i : fin 9), finset.card (row i) = 9 := dec_trivial
+@[simp] lemma card_col : ∀ (i : fin 9), finset.card (col i) = 9 := dec_trivial
+@[simp] lemma card_box : ∀ (i : fin 9), finset.card (box i) = 9 := dec_trivial
+
+lemma row_injective (s : sudoku) (h_row : row_axiom s) (i : fin 9) :
+  ∀ a b ∈ row i, s a = s b → a = b :=
+begin
+  intros a b ha hb h_eq,
+  have h_srow : same_row a b,
+  { rw mem_row at ha hb,
+    rw ← hb at ha,
+    exact ha
+  },
+  apply h_row _ _ h_srow h_eq
+end
+
+lemma row_surjective (s : sudoku) (h_row : row_axiom s) (i v : fin 9) :
+  ∃ c ∈ (row i), v = s c :=
+finset.surj_on_of_inj_on_of_card_le 
+  (λ c (hc : c ∈ row i), s c)
+  (λ _ _, finset.mem_univ _)
+  (row_injective s h_row i)
+  (by simp) _
+  (mem_univ _)
+
+
+#exit
+import ring_theory.polynomial.homogeneous
+
+variables {σ R : Type*} [comm_semiring R]
+
+namespace mv_polynomial
+
+lemma homogeneous_submodule_eq_span_monomial (i : ℕ) :
+  homogeneous_submodule σ R i =
+    submodule.span R ((λ d, monomial d 1) '' { d : σ →₀ ℕ | d.sum (λ _, id) = i }) :=
+begin
+  rw [homogenous_submodule_eq_finsupp_supported, finsupp.supported_eq_span_single],
+  refl,
+end
+#print submodule.span_induction
+
+@[elab_as_eliminator, elab_strategy]
+theorem submodule.span_induction {R : Type*} {M : Type*} [_inst_1 : semiring R]
+  [_inst_2 : add_comm_monoid M] [_inst_5 : module R M] {x : M}
+  {s : set M} {p : M → Prop}
+  (hx : x ∈ submodule.span R s)
+  (h0 : p 0)
+  (hadd : ∀ (a : R) (x y : M), x ∈ s → y ∈ submodule.span R s → p y → p (a • x + y)) : p x :=
+sorry
+
+lemma is_homogeneous.induction_on'
+  {p : mv_polynomial σ R → Prop}
+  (hmonomial : ∀ d r, p (monomial d r))
+  (hadd : ∀ j (a b : mv_polynomial σ R),
+    a.is_homogeneous j → b.is_homogeneous j → p a → p b → p (a + b))
+  {x : mv_polynomial σ R} {i : ℕ} (hx : x.is_homogeneous i)
+  : p x :=
+begin
+  let p_submonoid : add_submonoid (mv_polynomial σ R) :=
+  { carrier := { x | x.is_homogeneous i ∧ p x },
+    add_mem' := λ a b ⟨ha, pa⟩ ⟨hb, pb⟩, ⟨ha.add hb, hadd i a b ha hb pa pb⟩,
+    zero_mem' := ⟨is_homogeneous_zero _ _ _, by simpa using hmonomial 0 0⟩ },
+  suffices : x ∈ p_submonoid, { exact and.right this },
+  rw ←finsupp.sum_single x,
+  apply add_submonoid.finsupp_sum_mem,
+  intros d hd,
+  exact ⟨is_homogeneous_monomial _ _ _ (hx hd), hmonomial _ _⟩,
+end
+
+
+
+#print submodule.span_induction
+/-- To prove a property `p` on all homogenous polynomials, it suffices to prove it for monomials
+and their summations. -/
+lemma is_homogeneous.induction_on'
+  {p : mv_polynomial σ R → Prop}
+  (hmonomial : ∀ d r, p (monomial d r))
+  (hadd : ∀ j (a b : mv_polynomial σ R), a.is_homogeneous j → b.is_homogeneous j → p a → p b → p (a + b))
+  {x : mv_polynomial σ R} {i : ℕ} (hx : x.is_homogeneous i)
+  : p x :=
+begin
+  rw [←mem_homogeneous_submodule, homogeneous_submodule_eq_span_monomial] at hx,
+  suffices : p x ∧ x.is_homogeneous i,
+  { exact this.1 },
+  apply submodule.span_induction hx,
+  { rintros xi ⟨d, hd, rfl⟩,
+    admit },
+  { admit },
+  sorry, --oops
+  sorry, --oops
+end
+
+end mv_polynomial
+
+end mv_polynomial
+
+#exit
+
+eval main
+
+
+import order.complete_lattice
+import data.set.intervals.basic
+import data.fin
+
+open set
+
+
+
+example {X : Type*} [partial_order X] (x y : X) :
+  (Ico y x = {y}) ↔ (∀ z, y < z ↔ x ≤ z) :=
+begin
+  simp only [set.eq_singleton_iff_unique_mem,
+    set.mem_Ico, le_refl, true_and, and_imp],
+  split,
+  { assume h z,
+    split,
+    { assume hyz,
+      have := h.2 z (le_of_lt hyz),
+      admit
+       },
+    { assume hxz,
+      refine lt_of_le_of_ne _ _,
+      {  } }
+     }
+
+
+end
+
+
+universe u
+
+open set
+
+variables (X : Type u) [complete_lattice X]
+
+structure composition_series : Type u :=
+(length : ℕ)
+(series : fin length.succ → X)
+-- (zero : series 0 = ⊥)
+-- (last : series (fin.last length) = ⊤)
+(step : ∀ i : fin length, Ico (series i.cast_succ) (series i.succ) = {series i.cast_succ})
+
+-- /- Make composition series a list on an interval -/
+-- #print list.chain'
+-- structure composition_series' : Type u :=
+-- (l : list X)
+-- ()
+
+namespace composition_series
+
+instance : has_coe_to_fun (composition_series X) :=
+{ F := _, coe := composition_series.series }
+
+variables {X}
+
+theorem lt_succ (s : composition_series X) (i : fin s.length) :
+  s i.cast_succ < s i.succ :=
+(mem_Ico.1 (eq_singleton_iff_unique_mem.1 (s.step i)).1).2
+
+protected theorem strict_mono (s : composition_series X) : strict_mono s :=
+fin.strict_mono_iff_lt_succ.2 (λ i h, s.lt_succ ⟨i, nat.lt_of_succ_lt_succ h⟩)
+
+protected theorem injective (s : composition_series X) : function.injective s :=
+s.strict_mono.injective
+
+@[simp] protected theorem eq_iff (s : composition_series X) {i j : fin s.length.succ} :
+  s i = s j ↔ i = j :=
+s.injective.eq_iff
+
+@[simps] def erase_top (s : composition_series X) : composition_series X :=
+{ length := s.length - 1,
+  series := λ i, s ⟨i, lt_of_lt_of_le i.2 (nat.succ_le_succ (nat.sub_le_self _ _))⟩,
+  step := λ i, begin
+    have := s.step ⟨i, lt_of_lt_of_le i.2 (nat.sub_le_self _ _)⟩,
+    cases i,
+    exact this
+  end }
+
+def fin.cast_add_right {}
+
+@[simps] def append (s₁ s₂ : composition_series X)
+  (h : s₁ (fin.last _) = s₂ 0) : composition_series X :=
+{ length := s₁.length + s₂.length,
+  series := fin.append (nat.add_succ _ _).symm (s₁ ∘ fin.cast_succ) s₂,
+  step := λ i, begin
+
+
+  end }
+
+
+lemma last_erase_top (s : composition_series X) :
+  s.erase_top (fin.last _) = s (fin.cast_succ (fin.last (s.length - 1))) :=
+show s _ = s _, from congr_arg s
+begin
+  ext,
+  simp only [erase_top_length, fin.coe_last, fin.coe_cast_succ, fin.coe_of_nat_eq_mod,
+    fin.coe_mk, coe_coe],
+  rw [nat.mod_eq_of_lt (lt_of_le_of_lt (nat.sub_le_self _ _) (nat.lt_succ_self _))],
+end
+
+-- theorem subsingleton_iff_length_eq_zero (s : composition_series X) :
+--   subsingleton X ↔ s.length = 0 :=
+-- begin
+--   erw [← subsingleton_iff_bot_eq_top, ← s.zero, ← s.last, s.eq_iff, fin.ext_iff],
+--   simp [eq_comm]
+-- end
+
+variables (r : (X × X) → (X × X) → Prop)
+
+def equivalence (s₁ s₂ : composition_series X) : Type* :=
+{ f : fin s₁.length ≃ fin s₂.length //
+  ∀ i : fin s₁.length, r (s₁ i, s₁ i.succ) (s₂ (f i), s₂ (f i).succ) }
+
+namespace equivalence
+
+variables [is_equiv _ r]
+
+@[refl] def refl (s : composition_series X) : equivalence r s s :=
+⟨equiv.refl _, λ _, is_refl.reflexive _⟩
+
+@[symm] def symm {s₁ s₂ : composition_series X} (h : equivalence r s₁ s₂) :
+  equivalence r s₂ s₁ :=
+⟨h.1.symm, λ i, is_symm.symm _ _ (by simpa using h.2 (h.1.symm i))⟩
+
+@[trans] def trans {s₁ s₂ s₃ : composition_series X}
+  (h₁ : equivalence r s₁ s₂)
+  (h₂ : equivalence r s₂ s₃) :
+  equivalence r s₁ s₃ :=
+⟨h₁.1.trans h₂.1, λ i, is_trans.trans _ _ _ (h₁.2 i) (h₂.2 (h₁.1 i))⟩
+
+lemma append
+
+end equivalence
+
+@[elab_as_eliminator, elab_strategy]
+def fin.last_cases {n : ℕ} {C : fin n.succ → Sort*}
+  (hlast : C (fin.last n)) (hcast : (Π (i : fin n), C i.cast_succ)) (i : fin n.succ) : C i :=
+if hi : i = fin.last _
+then cast (by rw hi) hlast
+else have hi : i = fin.cast_succ ⟨i, lt_of_le_of_ne (nat.le_of_lt_succ i.2)
+    (λ h, hi (fin.ext h))⟩, from fin.ext rfl,
+  cast (by rw hi) (hcast _)
+
+@[simp] lemma fin.last_cases_last  {n : ℕ} {C : fin n.succ → Sort*}
+  (hlast : C (fin.last n)) (hcast : (Π (i : fin n), C i.cast_succ)) :
+  (fin.last_cases hlast hcast (fin.last n): C (fin.last n)) = hlast :=
+by simp [fin.last_cases]
+
+@[simp] lemma fin.last_cases_cast_succ  {n : ℕ} {C : fin n.succ → Sort*}
+  (hlast : C (fin.last n)) (hcast : (Π (i : fin n), C i.cast_succ)) (i : fin n) :
+  (fin.last_cases hlast hcast (fin.cast_succ i): C (fin.cast_succ i)) = hcast i :=
+begin
+  simp only [fin.last_cases, dif_neg (ne_of_lt (fin.cast_succ_lt_last i)), cast_eq],
+  congr,
+  simp,
+end
+
+lemma equivalent_of_erase_top_equivalent {s₁ s₂ : composition_series X}
+  (h0₁ : 0 < s₁.length) (h0₂ : 0 < s₂.length)
+  (htop : s₁ (fin.last _) = s₂ (fin.last _))
+  (h : equivalence r s₁.erase_top s₂.erase_top)
+  (htop_erase_top : s₁.erase_top (fin.last _) = s₂.erase_top (fin.last _)) :
+  equivalence r s₁ s₂ :=
+let f : fin (s₁.length - 1) ≃ fin (s₂.length - 1) :=
+⟨_,
+  begin
+    intros i j hij,
+    refine fin.last_cases _ _ j,
+
+  end⟩
+
+theorem jordan_hoelder (s₁ s₂ : composition_series X)
+  (h0 : s₁ 0 = s₂ 0) (hl : s₁ (fin.last _) = s₂ (fin.last _))
+  : equivalent r s₁ s₂ :=
+begin
+  induction hl : s₁.length with n ih generalizing s₁ s₂,
+  { admit
+    --  haveI hs : subsingleton X,
+    -- { rw [subsingleton_iff_length_eq_zero, hl] },
+    -- have : s₁.length = s₂.length,
+    -- { rw [hl, eq_comm, ← subsingleton_iff_length_eq_zero,
+    --     s₁.subsingleton_iff_length_eq_zero, hl] },
+    -- use this,
+    -- intros i j hij,
+    -- have : ∀ x : X, x = s₁ i, from λ _, subsingleton.elim _ _,
+    -- rw [this (s₁ j), this (s₂ _), this (s₂ _)],
+    -- exact is_refl.reflexive _
+    },
+  { let H := s₁.erase_top (fin.last _),
+    let K := s₂.erase_top (fin.last _),
+    by_cases hHK : H = K,
+    {  }
+
+      }
+
+end
+
+  -- (second_iso : ∀ h k, r (h ⊔ k, k) (h, h ⊓ k))
+  -- (hIco : ∀ g h k : X, Ico h g = {h} → Ico k g = {k} → Ico (h ⊓ k) h = {h ⊓ k})
+
+
+
+#exit
+import algebra.char_p.basic
+import tactic.ring
+
+variables {R : Type} [comm_ring R] [char_p R 7]
+
+@[simp] lemma ring_char_eq : ring_char R = 7 :=
+eq.symm $ ring_char.eq _ (by assumption)
+
+@[simp] lemma seven_eq_zero : (7 : R) = 0 :=
+calc (7 : R) = (7 : ℕ) : by simp
+... = 0 : char_p.cast_eq_zero _ _
+
+@[simp] lemma bit0bit0bit0 (n : R) : (bit0 $ bit0 $ bit0 n) = n :=
+calc (bit0 $ bit0 $ bit0 n) = 7 * n + n : by delta bit0; ring
+... = n : by simp
+
+@[simp] lemma bit0bit0bit1 (n : R) : (bit0 $ bit0 $ bit1 n) = n + 4 :=
+calc (bit0 $ bit0 $ bit1 n) = 7 * n + n + 4 : by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit0bit1bit0 (n : R) : (bit0 $ bit1 $ bit0 n) = n + 2 :=
+calc (bit0 $ bit1 $ bit0 n) = 7 * n + n + 2 : by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit0bit1bit1 (n : R) : (bit0 $ bit1 $ bit1 n) = n + 6 :=
+calc (bit0 $ bit1 $ bit1 n) = 7 * n + n + 6 : by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit1bit0bit0 (n : R) : (bit1 $ bit0 $ bit0 n) = n + 1 :=
+calc (bit1 $ bit0 $ bit0 n) = 7 * n + n + 1 : by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit1bit0bit1 (n : R) : (bit1 $ bit0 $ bit1 n) = n + 5 :=
+calc (bit1 $ bit0 $ bit1 n) = 7 * n + n + 5 : by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit1bit1bit0 (n : R) : (bit1 $ bit1 $ bit0 n) = n + 3 :=
+calc (bit1 $ bit1 $ bit0 n) = 7 * n + n + 3 : by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit1bit1bit1 (n : R) : (bit1 $ bit1 $ bit1 n) = n :=
+calc (bit1 $ bit1 $ bit1 n) = 7 * n + n + 7: by delta bit0 bit1; ring
+... = _ : by simp
+
+@[simp] lemma bit0_add_bit0 (n m : R) : bit0 n + bit0 m = bit0 (n + m) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma bit0_add_bit1 (n m : R) : bit0 n + bit1 m = bit1 (n + m) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma bit1_add_bit0 (n m : R) : bit1 n + bit0 m = bit1 (n + m) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma bit1_add_bit1 (n m : R) : bit1 n + bit1 m = bit1 (n + m) + 1 :=
+by delta bit0 bit1; ring
+
+@[simp] lemma bit0_add_one (n : R) : bit0 n + 1 = bit1 n :=
+by delta bit0 bit1; ring
+
+@[simp] lemma three_add_one : (3 : R) + 1 = 4 :=
+by delta bit0 bit1; ring
+
+@[simp] lemma one_add_one : (1 : R) + 1 = 2 :=
+by delta bit0 bit1; ring
+
+@[simp] lemma bit1bit0_add_one (n : R) : bit1 (bit0 n) + 1 = bit0 (bit1 n) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma bit1bit1_add_one (n : R) : bit1 (bit1 n) + 1 = bit0 (bit0 (n + 1)) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma one_add_bit0 (n : R) : 1 + bit0 n = bit1 n :=
+by delta bit0 bit1; ring
+
+@[simp] lemma one_add_bit1bit0 (n : R) : 1 + bit1 (bit0 n) = bit0 (bit1 n) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma one_add_bit1bit1 (n : R) : 1 + bit1 (bit1 n) = bit0 (bit0 (n + 1)) :=
+by delta bit0 bit1; ring
+
+@[simp] lemma one_add_three : (1 : R) + 3 = 4 :=
+by delta bit0 bit1; ring
+
+set_option trace.simplify.rewrite true
+example : (145903 : R) = 2 :=
+begin
+  simp,
+
+end
+
+#exit
+import group_theory.perm.cycles
+
+open string equiv.perm tactic equiv
+
+run_cmd
+do
+   "c[1, 4, 3, 2]" ← pure (repr (1 : ℕ)),
+   pure ()
+
+variables {A : Type*} [add_comm_group A] (n m k : ℤ) (a b c : A)
+
+example : (n + m) • a = n • a + m • a :=
+by abel -- fails
+
+example : (5 : ℤ) • a + a = (6 : ℤ) • a :=
+by abel -- works
+
+example : (5 : ℤ) • a + a = (6 : ℕ) • a :=
+by abel -- fails
+
+example : (5 + 4 : ℤ) • a + a = (10 : ℤ) • a :=
+by abel -- works
+
+example : (5 + 3 + 1 : ℤ) • a + a = (10 : ℤ) • a :=
+by abel -- works
+
+#print norm_num.eval_field
+
+#exit
+import data.list.basic
+
+variables {A : Type} (op : A → A → A)
+
+#reduce
+  let x : ℕ := (list.range 10000).nth_le 0 sorry in
+  1
+#exit
+import group_theory.subgroup
+import group_theory.free_group
+
+universes u v
+
+def fintype' : Type* → Type* := id
+
+def fintype'.card {α : Type u} [fintype' α] : Type u := α
+set_option pp.universes true
+
+
+
+variables {G : Type u} [group G]
+
+def X : has_coe_to_sort (subgroup G) := by apply_instance
+
+#print set_like.has_coe_to_sort
+
+@[simp, to_additive] lemma card_bot {h : fintype' (⊤ : subgroup G)} : ℕ :=
+0
+
+#exit
+
+import data.nat.totient
+import data.zmod.basic
+import group_theory.order_of_element
+
+lemma pow_eq_pow_mod_card {G : Type*} [group G] [fintype G] (a : G) (n : ℕ) :
+  a ^ n = a ^ (n % fintype.card G) :=
+by rw [pow_eq_mod_order_of, @pow_eq_mod_order_of _ _ _ (_ % fintype.card G),
+    nat.mod_mod_of_dvd _ order_of_dvd_card_univ]
+
+lemma pow_eq_pow_mod_totient {n : ℕ} (a : units (zmod n)) (k : ℕ) :
+  a ^ k = a ^ (k % nat.totient n) :=
+if hn0 : n = 0
+  then by simp [hn0]
+  else by { haveI : fact (0 < n) := fact.mk (nat.pos_of_ne_zero hn0),
+    rw [pow_eq_pow_mod_card a k, zmod.card_units_eq_totient] }
+
+lemma pow_mod_eq_pow_mod_totient {n : ℕ} (a k : ℕ) (han : nat.coprime a n) :
+  (a ^ k) % n = (a ^ (k % nat.totient n)) % n :=
+(zmod.eq_iff_modeq_nat n).1 begin
+  rw [nat.cast_pow, nat.cast_pow, ← zmod.coe_unit_of_coprime a han,
+    ← units.coe_pow, ← units.coe_pow, pow_eq_pow_mod_totient],
+end
+
+lemma nat.totient_eq_list_range (n : ℕ) :
+  nat.totient n = ((list.range n).filter (nat.coprime n)).length :=
+begin
+  rw [nat.totient, ← list.erase_dup_eq_self.2 (list.nodup_filter _ (list.nodup_range n)),
+    ← list.card_to_finset],
+  refine congr_arg finset.card _,
+  ext,
+  simp,
+end
+
+def prod_zmod_one_equiv (R : Type*) [semiring R] : R ≃+* R × zmod 1 :=
+{ to_fun := λ x, (x, 0),
+  inv_fun := prod.fst,
+  map_add' := by intros; ext; simp; congr,
+  map_mul' := by intros; ext; simp; congr,
+  left_inv := λ x, rfl,
+  right_inv := λ x, by apply prod.ext; simp; congr }
+
+def zmod_one_prod_equiv (R : Type*) [semiring R] : R ≃+* zmod 1 × R :=
+{ to_fun := λ x, (0, x),
+  inv_fun := prod.snd,
+  map_add' := by intros; ext; simp; congr,
+  map_mul' := by intros; ext; simp; congr,
+  left_inv := λ x, rfl,
+  right_inv := λ x, by apply prod.ext; simp; congr }
+
+local attribute [instance] zmod.char_p
+
+def chinese_remainder (m n : ℕ) (h : m.coprime n) :
+  zmod (m * n) ≃+* zmod m × zmod n :=
+if hmn0 : m * n = 0
+  then if hm1 : m = 1
+    then begin
+      rw [hm1, one_mul],
+      exact zmod_one_prod_equiv _
+    end
+  else have hn1 : n = 1,
+      begin
+        rw [nat.mul_eq_zero] at hmn0,
+        rcases hmn0 with ⟨rfl, rfl⟩;
+        simp [*, fact_iff] at *,
+      end,
+    begin
+      rw [hn1, mul_one],
+      exact prod_zmod_one_equiv _
+    end
+else
+by haveI : fact (0 < (m * n)) := fact.mk (nat.pos_of_ne_zero hmn0);
+   haveI : fact (0 < m) := fact.mk (nat.pos_of_ne_zero $ λ h, by simp [fact_iff, *] at *);
+   haveI : fact (0 < n) := fact.mk (nat.pos_of_ne_zero $ λ h, by simp [fact_iff, *] at *);
+exact
+{ to_fun := λ x, (zmod.cast_hom (dvd_mul_right _ _) _ x, zmod.cast_hom (dvd_mul_left _ _) _ x),
+  inv_fun := λ x, nat.modeq.chinese_remainder h x.1.val x.2.val,
+  map_mul' := λ _ _, by ext; simp only [ring_hom.map_mul]; refl,
+  map_add' := λ _ _, by ext; simp only [ring_hom.map_add]; refl,
+  left_inv := λ x, begin
+    conv_rhs { rw ← zmod.nat_cast_zmod_val x },
+    dsimp,
+    rw [zmod.eq_iff_modeq_nat, ← nat.modeq.modeq_and_modeq_iff_modeq_mul h],
+    refine
+      ⟨(subtype.property (nat.modeq.chinese_remainder h (x : zmod m).val (x : zmod n).val)).1.trans _,
+       (subtype.property (nat.modeq.chinese_remainder h (x : zmod m).val (x : zmod n).val)).2.trans _⟩,
+    rw [← zmod.eq_iff_modeq_nat, zmod.nat_cast_zmod_val, zmod.nat_cast_val],
+    rw [← zmod.eq_iff_modeq_nat, zmod.nat_cast_zmod_val, zmod.nat_cast_val],
+  end,
+  right_inv := λ x,
+    begin
+      haveI : fact (0 < (m * n)) := fact.mk (nat.pos_of_ne_zero hmn0),
+      haveI : fact (0 < m) := fact.mk (nat.pos_of_ne_zero $ λ h, by simp [fact_iff, *] at *),
+      haveI : fact (0 < n) := fact.mk (nat.pos_of_ne_zero $ λ h, by simp [fact_iff, *] at *),
+      ext,
+      { conv_rhs { rw ← zmod.nat_cast_zmod_val x.1 },
+        dsimp,
+        rw [@zmod.cast_nat_cast _ (zmod m) _ _ _ (dvd_mul_right _ _)],
+        rw [zmod.eq_iff_modeq_nat],
+        exact (nat.modeq.chinese_remainder h _ _).2.1,
+        apply_instance },
+      { conv_rhs { rw ← zmod.nat_cast_zmod_val x.2 },
+        dsimp,
+        rw [@zmod.cast_nat_cast _ (zmod n) _ _ _ (dvd_mul_left _ _)],
+        rw [zmod.eq_iff_modeq_nat],
+        exact (nat.modeq.chinese_remainder h _ _).2.2,
+        apply_instance }
+    end }
+
+lemma totient_mul (m n : ℕ) (h : m.coprime n) : nat.totient (m * n) =
+  nat.totient m * nat.totient n :=
+if hmn0 : m * n = 0
+  then by finish
+  else
+  begin
+    haveI : fact (0 < m * n) := fact.mk (nat.pos_of_ne_zero hmn0),
+    haveI : fact (0 < m) := fact.mk (nat.pos_of_ne_zero $ λ h, by simp [fact_iff, *] at *),
+    haveI : fact (0 < n) := fact.mk (nat.pos_of_ne_zero $ λ h, by simp [fact_iff, *] at *),
+    rw [← zmod.card_units_eq_totient, ← zmod.card_units_eq_totient,
+      ← zmod.card_units_eq_totient],
+    rw [fintype.card_congr (units.map_equiv (chinese_remainder _ _ h).to_mul_equiv).to_equiv],
+    rw [fintype.card_congr (@mul_equiv.prod_units (zmod m) (zmod n) _ _).to_equiv],
+    rw [fintype.card_prod]
+  end
+
+lemma nat.coprime_pow_left_iff (a b : ℕ) {n : ℕ} (hn : 0 < n) :
+  nat.coprime (a ^ n) b ↔ nat.coprime a b :=
+begin
+  cases n with n,
+  { exact (lt_irrefl _ hn).elim },
+  { rw [pow_succ, nat.coprime_mul_iff_left],
+    exact iff.intro and.left (λ hab, ⟨hab, nat.coprime.pow_left _ hab⟩) }
+end
+
+lemma totient_prime_pow {p : ℕ} (hp : p.prime) (n : ℕ) :
+  nat.totient (p ^ (n + 1)) = p ^ n * (p - 1) :=
+calc nat.totient (p ^ (n + 1))
+    = ((finset.range (p ^ (n + 1))).filter (nat.coprime (p ^ (n + 1)))).card : rfl
+... = (finset.range (p ^ (n + 1)) \ ((finset.range (p ^ n)).image (* p))).card :
+  congr_arg finset.card begin
+    rw [finset.sdiff_eq_filter],
+    apply finset.filter_congr,
+    simp only [finset.mem_range, finset.mem_filter, nat.coprime_pow_left_iff _ _ (nat.succ_pos n),
+      finset.mem_image, not_exists, hp.coprime_iff_not_dvd],
+    intros a ha,
+    split,
+    { rintros hap b _ rfl,
+      exact hap (dvd_mul_left _ _) },
+    { rintros h ⟨b, rfl⟩,
+      rw [pow_succ] at ha,
+      exact h b (lt_of_mul_lt_mul_left ha (nat.zero_le _)) (mul_comm _ _) }
+  end
+... = _ :
+have h1 : set.inj_on (* p) (finset.range (p ^ n)),
+  from λ x _ y _, (nat.mul_left_inj hp.pos).1,
+have h2 : (finset.range (p ^ n)).image (* p) ⊆ finset.range (p ^ (n + 1)),
+  from λ a, begin
+    simp only [finset.mem_image, finset.mem_range, exists_imp_distrib],
+    rintros b h rfl,
+    rw [pow_succ'],
+    exact (mul_lt_mul_right hp.pos).2 h
+  end,
+begin
+  rw [finset.card_sdiff h2, finset.card_image_of_inj_on h1, finset.card_range,
+    finset.card_range, ← one_mul (p ^ n), pow_succ, ← nat.mul_sub_right_distrib,
+    one_mul, mul_comm]
+end
+
+lemma totient_prime {p : ℕ} (hp : p.prime) : nat.totient p = p - 1 :=
+by conv_lhs { rw [← pow_one p, totient_prime_pow hp, pow_zero, one_mul] }
+
+namespace tactic.interactive
+
+meta def totient_tac : tactic unit :=
+`[simp only [nat.totient_eq_list_range],
+  delta nat.coprime,
+  dsimp only [list.range, list.range_core],
+  dsimp only [list.filter],
+  norm_num]
+
+end tactic.interactive
+
+lemma totient_1000000 : nat.totient 1000000 = 400000 :=
+calc nat.totient 1000000 = nat.totient (5 ^ 6 * 2 ^ 6) :
+  congr_arg nat.totient (by norm_num)
+... = 400000 : begin
+  rw [totient_mul, totient_prime_pow, totient_prime_pow];
+  try {delta nat.coprime}; norm_num
+end
+
+lemma totient_400000 : nat.totient 400000 = 160000 :=
+calc nat.totient 400000 = nat.totient (2 ^ 7 * 5 ^ 5) :
+  congr_arg nat.totient (by norm_num)
+... = 160000 : begin
+  rw [totient_mul, totient_prime_pow, totient_prime_pow];
+  try {delta nat.coprime}; norm_num
+end
+
+lemma totient_160000 : nat.totient 160000 = 64000 :=
+calc nat.totient 160000 = nat.totient (2 ^ 8 * 5 ^ 4) :
+  congr_arg nat.totient (by norm_num)
+... = 64000 : begin
+  rw [totient_mul, totient_prime_pow, totient_prime_pow];
+  try {delta nat.coprime}; norm_num,
+end
+
+lemma totient_64000 : nat.totient 64000 = 25600 :=
+calc nat.totient 64000 = nat.totient (2 ^ 9 * 5 ^ 3) :
+  congr_arg nat.totient (by norm_num)
+... = 25600 :
+begin
+  rw [totient_mul, totient_prime_pow, totient_prime_pow];
+  try {delta nat.coprime}; norm_num,
+end
+
+lemma totient_25600 : nat.totient 25600 = 10240 :=
+calc nat.totient 25600 = nat.totient (2 ^ 10 * 5 ^ 2) :
+  congr_arg nat.totient (by norm_num)
+... = 10240 :
+begin
+  rw [totient_mul, totient_prime_pow, totient_prime_pow];
+  try {delta nat.coprime}; norm_num,
+end
+
+lemma totient_10240 : nat.totient 10240 = 4096 :=
+calc nat.totient 10240 = nat.totient (2 ^ 11 * 5) :
+  congr_arg nat.totient (by norm_num)
+... = 4096 :
+begin
+  rw [totient_mul, totient_prime_pow, totient_prime];
+  try {delta nat.coprime}; norm_num,
+end
+
+def pow_mod (a b c : ℕ) : ℕ := (a ^ b) % c
+
+lemma pow_mod_bit0 (a b c : ℕ) :
+  pow_mod a (bit0 b) c = pow_mod a b c ^ 2 % c :=
+by rw [pow_mod, pow_mod, pow_two, bit0, pow_add, nat.mul_mod],
+
+lemma pow_mod_bit1 (a b c : ℕ) :
+  pow_mod a (bit1 b) c = (pow_mod a b c ^ 2 % c * a % c) % c :=
+begin
+  rw [bit1, bit0, pow_mod, pow_add, ← pow_mod, nat.mul_mod, ← pow_mod,
+    ← bit0, pow_mod_bit0, pow_one, nat.mod_mod, pow_mod, pow_mod],
+  conv_rhs { rw nat.mul_mod },
+  rw [nat.mod_mod]
+end
+
+lemma pow_mod_one (a c : ℕ) :
+  pow_mod a 1 c = a % c :=
+by simp [pow_mod]
+
+def seven_sevens_mod : (7 ^ 7 ^ 7 ^ 7 ^ 7 ^ 7 ^ 7) % 1000000 = 172343 :=
+begin
+  rw [pow_mod_eq_pow_mod_totient, totient_1000000,
+      @pow_mod_eq_pow_mod_totient 400000, totient_400000,
+      @pow_mod_eq_pow_mod_totient 160000, totient_160000,
+      @pow_mod_eq_pow_mod_totient 64000, totient_64000,
+      @pow_mod_eq_pow_mod_totient 25600, totient_25600,
+      @pow_mod_eq_pow_mod_totient 10240, totient_10240],
+  repeat { rw [← pow_mod] },
+  norm_num [pow_mod_bit0, pow_mod_bit1, pow_mod_one],
+  all_goals { delta nat.coprime, norm_num }
+end
+
+
+#print axioms seven_sevens_mod
+
+#exit
+
+import data.nat.fib
+import data.real.sqrt
+import tactic
+
+open nat real
+
+lemma fib_formula : ∀ n : ℕ,
+  (((1 + real.sqrt 5) / 2) ^ n - ((1 - sqrt 5) / 2) ^ n) / sqrt 5 = fib n
+| 0     := by simp
+| 1     := begin
+  have hs : real.sqrt 5 ≠ 0, by norm_num,
+  field_simp [hs],
+  ring,
+end
+| (n+2) := begin
+  have hs : real.sqrt 5 ≠ 0, { norm_num },
+  have hsq : real.sqrt 5 ^ 2 = 5, { norm_num },
+  have hsq3 : real.sqrt 5 ^ 3 = real.sqrt 5 * 5, { rw [pow_succ, hsq] },
+  have hsq4 : real.sqrt 5 ^ 4 = 1 + 24 - 1 + 5 - 4, { rw [pow_bit0, hsq], norm_num },
+  rw [fib_succ_succ, nat.cast_add, ← fib_formula, ← fib_formula],
+  field_simp [hs],
+  ring_exp,
+  rw [hsq, hsq3, hsq4],
+  ring
+end
+
+#exit
+import data.int.basic
+
+inductive poly
+| C : ℤ → poly
+| X : poly
+| add : poly → poly → poly
+| mul : poly → poly → poly
+
+open poly
+
+instance : has_add poly := ⟨poly.add⟩
+instance : has_mul poly := ⟨poly.mul⟩
+instance : has_one poly := ⟨C 1⟩
+instance : has_zero poly := ⟨C 0⟩
+instance : has_coe ℤ poly := ⟨C⟩
+instance : has_pow poly ℕ := ⟨λ p n, nat.rec_on n 1 (λ n q, nat.cases_on n p (λ m, p * q))⟩
+
+/-- Remove leading zeroes from a list -/
+def erase_zeroes : list ℤ → list ℤ
+| [] := []
+| m@(a :: l) := if a = 0 then erase_zeroes l else m
+
+-- add_list_aux l₁ l₂ r returns ((reverse l₁ + reverse l₂) ++ r)
+def add_list_aux :
+  list ℤ →
+  list ℤ →
+  list ℤ →
+  list ℤ
+| [] [] r := r
+| (a::l) [] r := add_list_aux l [] (a::r)
+| [] (a::l) r := add_list_aux [] l (a::r)
+| (a::l₁) (b::l₂) r := add_list_aux l₁ l₂ ((a + b) :: r)
+
+def add_list (l₁ l₂ : list ℤ) :=
+erase_zeroes (add_list_aux l₁.reverse l₂.reverse [])
+
+def mul_list : list ℤ → list ℤ → list ℤ
+| [] l       := []
+| (a::l₁) l₂ :=
+  add_list (l₂.map (*a) ++ list.repeat 0 l₁.length) (mul_list l₁ l₂)
+
+def poly_to_list : poly → list ℤ
+| (C n) := if n = 0 then [] else [n]
+| X     := [1, 0]
+| (add p q) := add_list (poly_to_list p) (poly_to_list q)
+| (mul p q) := mul_list (poly_to_list p) (poly_to_list q)
+
+instance : has_repr poly := ⟨repr ∘ poly_to_list⟩
+
+/- Multiples of (X - a) form an ideal -/
+
+def mults_is_ideal_zero (a : ℤ) : poly × poly := (0, 0)
+
+def mults_is_ideal_add (a : ℤ) (f fdiv g gdiv : poly) : poly × poly :=
+(f + g, fdiv + gdiv)
+
+def mults_is_ideal_smul (a : ℤ) (f g gdiv : poly) : poly × poly :=
+(f * g, f * gdiv)
+
+def ring_hom_well_defined_on_quotient
+  (I : poly → Type) (I0 : I 0)
+  (Iadd : Π p q, I p → I q → I (p + q))
+  (Ismul : Π p q, I q → I (p * q))
+
+
+def mod_div (a : ℤ) : poly → ℤ × poly
+| (C n)     := (n, 0)
+| X         := (a, 1)
+| (add p q) :=
+  let (np, Pp) := mod_div p in
+  let (nq, Pq) := mod_div q in
+  -- p = Pp * (X - a) + np
+  -- q = Pq * (X - a) + nq
+  -- So p + q = (Pp + Pq) * (X - a) + (np + nq)
+  (np + nq, Pp + Pq)
+| (mul p q) :=
+  let (np, Pp) := mod_div p in
+  let (nq, Pq) := mod_div q in
+  -- p = Pp * (X - a) + np
+  -- q = Pq * (X - a) + nq
+  -- p * q = (Pp * Pq * (X - a) + np * Pq + nq * Pp) * (X - a) + (np + nq)
+  (np + nq, Pp * Pq * (X + C (-a)) + np * Pq + nq * Pp)
+
+#eval mod_div (-1) (X * X + 2 * X + 1)
+
+
+#exit
+import data.list.perm
+
+variables {α : Type*} [decidable_eq α] {l₁ l₂ : list α}
+#eval list.permutations [1,2,3,0]
+
+lemma X {α : Type} (a : α) (l : list α) : list.permutations (l ++ [a]) =
+  l.permutations.bind (λ l, (list.range l.length.succ).map (λ n, l.insert_nth n a)) := sorry
+#print list.permutations_aux2
+
+lemma permutations_cons {α : Type} (a : α) (l : list α) :
+  list.permutations (a :: l) ~ l.permutations.bind
+  (λ l, (list.range l.length.succ).map (λ n, l.insert_nth n a)) :=
+begin
+  unfold list.permutations,
+
+end
+
+
+#eval let l := [1,2,3] in let a := 0 in
+(list.permutations (l ++ [a]) =
+  l.permutations.bind (λ l, (list.range l.length.succ).map (λ n, l.insert_nth n a)) : bool)
+
+
+#exit
+ariables (P : Prop) (R : P → P → Prop) (α : Type) (f : P → α)
+  (H : ∀ x y, R x y → f x = f y) (q : quot R) (h : P)
+
+example : q = quot.mk R h := rfl
+#print task
+#print task.
+
+local attribute [semireducible] reflected
+run_cmd tactic.add_decl (declaration.thm `exmpl []
+
+  `(∀ (P : Prop) (R : P → P → Prop) (α : Type) (f : P → α)
+    (H : ∀ x y, R x y → f x = f y) (q : quot R) (h : P),
+    quot.lift f H q = quot.lift f H (quot.mk R h))
+  (task.pure `(λ (P : Prop) (R : P → P → Prop) (α : Type) (f : P → α)
+    (H : ∀ x y, R x y → f x = f y) (q : quot R) (h : P),
+    eq.refl (quot.lift f H q))))
+
+example : quot.lift f H q = quot.lift f H (quot.mk R h) := rfl
+
+
+
+#exit
+import data.polynomial.field_division
+import data.real.liouville
+
+
+
+lemma roots_derivative : ∀ (f : polynomial ℝ),
+  f.roots.to_finset.card = f.derivative.roots.to_finset.card + 1
+| f :=
+  if hfe : f.roots.to_finset = ∅
+    then by simp [hfe]
+    else begin
+      cases finset.nonempty_of_ne_empty hfe with a ha,
+      have hf0 : f ≠ 0, from λ hf0, by simp * at *,
+      rw [multiset.mem_to_finset, mem_roots hf0, ← dvd_iff_is_root] at ha,
+      rcases ha with ⟨g, rfl⟩,
+      rw [derivative_mul, derivative_sub, derivative_X, derivative_C,
+        sub_zero, one_mul, roots_mul hf0, roots_X_sub_C, multiset.to_finset_add],
+      simp,
+
+
+    end
+
+
+
+
+
+def f (n : ℕ) (h : acc (>) n) : unit :=
+acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n)) h
+
+-- notation `t1 ` := f 0 a
+
+-- def t2 (a : acc (>) 0) : unit := acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n)) a
+
+-- def t3 (a : acc (>) 0) : unit := acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+--     (acc.inv a (nat.lt_succ_self 0))
+
+example (a : acc (>) 0) :
+  f 0 a
+  = (acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n)) a : unit) :=
+rfl
+
+example (a : acc (>) 0) :
+  (acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+    (acc.intro 0 (λ y hy, acc.inv a hy)) : unit)
+  = acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+    (acc.inv a (nat.lt_succ_self 0)) :=
+rfl
+
+example (a : acc (>) 0) :
+  f 0 a
+  = acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+    (acc.inv a (nat.lt_succ_self 0)) := rfl
+
+
+
+inductive X (a : acc (>) 0) : unit → Type
+| mk (u : unit) : X u
+
+example (a : acc (>) 0) :
+  X a (f 0 a)
+  = X a (acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n)) a : unit) :=
+rfl
+
+#check λ a : acc (>) 0, @id
+    (X a (acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+    (acc.intro 0 (λ y hy, acc.inv a hy))))
+    (X.mk (acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+    (acc.inv a (nat.lt_succ_self 0))))
+
+#check λ a : acc (>) 0,
+    -- @id (X a (f 0 a))
+    (@id (X a ((acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n)) a)))
+    (X.mk (acc.rec (λ n _ g, g (n + 1) (nat.lt_succ_self n))
+      (acc.inv a (nat.lt_succ_self 0)))))
+
+
+
+variables {A : Type}
+
+def T (A : Type) : A → A → Prop := λ _ _, true
+
+inductive B : quot (T A) → Type
+| mk : Π a : A, B (quot.mk (T A) a)
+
+#print funext
+
+def f (a : quot (T A)) : B a :=
+quot.lift (λ x, _) _ a
+
+#exit
+
+import data.complex.basic
+open complex
+
+
+lemma X : (2 : ℂ).im = 0 :=
+begin
+  simp,
+end
+
+#print X
+
+inductive term (L : signature) : ℕ → Type
+| Var  (v : L.Variables) : term 0
+| Fun {n : ℕ} (f : L.funcs n) : term n
+| App {n : ℕ} : term (n+1) → term 0 → term n
+
+
+open subgroup
+
+variables {G : Type*} {H : Type*} [group G] [group H]
+
+example (p q : Prop) : (p → q) → (¬¬p → ¬¬q) :=
+λ h hnp hq, hnp (λ hp, hq $ h hp)
+
+example (p q r : Prop)
+  (h : ¬ ((p → q) ↔ r) ↔ (p → (q ↔ r))) : ¬p :=
+begin
+  by_cases hp : p,
+  { simp [hp] at h,
+    exact h.elim },
+  { assumption }
+end
+
+example (p q r : Prop)
+  (h : ¬ ((p → q) ↔ r) ↔ (p → (q ↔ r))) : ¬r :=
+begin
+  by_cases hr : r,
+  { by_cases hp : p;
+    simp [hp, hr] at h;
+    contradiction },
+  { assumption }
+end
+
+example (p q r : Prop) :
+  (¬(((p → q) ↔ r) ↔ (p → (q ↔ r)))) ↔ ¬p ∧ ¬r :=
+⟨λ h, ⟨λ hp, h ⟨λ h _, ⟨λ hq, h.1 (λ _, hq), λ hr, h.2 hr hp⟩,
+  λ h2, ⟨λ hpq, (h2 hp).1 (hpq hp), λ hr _, (h2 hp).2 hr⟩⟩,
+  λ hr, h ⟨λ h2 hp, ⟨λ _, hr, λ _, h2.2 hr hp⟩,
+  λ h2, ⟨λ _, hr, λ _ hp, (h2 hp).2 hr⟩⟩⟩,
+  λ h h2, h.2 $ (h2.2 (λ hp, (h.1 hp).elim)).1 (λ hp, (h.1 hp).elim)⟩
+
+lemma Z (h : ∀ (p q r : Prop),
+  (((p → q) ↔ r) ↔ (p → (q ↔ r))) ↔ p ∨ r) (p : Prop) : p ∨ ¬p  :=
+(h p true (¬ p)).1
+  ⟨λ h hp, ⟨λ _, h.1 (λ _, trivial), λ _, trivial⟩,
+  λ h, ⟨λ _ hp, (h hp).1 trivial hp, λ _ _, trivial⟩⟩
+
+lemma Z1 (h : ∀ (p q r : Prop),
+  (((p → q) ↔ r) ↔ (p → (q ↔ r))) ↔ p ∨ r) (p : Prop) : p ∨ ¬p  :=
+begin
+  have := h (¬ p) false p,
+  simp only [true_implies_iff, true_iff, true_or, iff_true, false_iff,
+    false_implies_iff, iff_false, false_or, imp_false] at this,
+end
+#print axioms Z
+
+example : ¬ ((false → true) ↔ false) ↔ (false → (true ↔ false)) :=
+begin
+  simp,
+
+end
+
+#exit
+
+lemma commutative_of_cyclic_center_quotient [is_cyclic H] (f : G →* H)
+  (hf : f.ker ≤ center G) (a b : G) : a * b = b * a :=
+begin
+  rcases is_cyclic.exists_generator f.range with ⟨⟨x, y, rfl⟩, hx⟩,
+  rcases hx ⟨f a, a, rfl⟩ with ⟨m, hm⟩,
+  rcases hx ⟨f b, b, rfl⟩ with ⟨n, hn⟩,
+  have hm : f y ^ m = f a, by simpa [subtype.ext_iff] using hm,
+  have hn : f y ^ n = f b, by simpa [subtype.ext_iff] using hn,
+  have ha : y ^ (-m) * a ∈ center G, from hf (f.mem_ker.2 (by group_rel [hm])),
+  have hb : y ^ (-n) * b ∈ center G, from hf (f.mem_ker.2 (by group_rel [hn])),
+  have this := mem_center_iff.1 ha (y ^ n),
+  have that := mem_center_iff.1 hb a,
+  group_rel [this, that],
+end
+
+#print commutative_of_cyclic_center_quotient
+def comm_group_of_cycle_center_quotient [is_cyclic H] (f : G →* H)
+  (hf : f.ker ≤ center G) : comm_group G :=
+{ mul_comm := commutative_of_cyclic_center_quotient f hf,
+  ..show group G, by apply_instance }
+
+
+
+
+#exit
+import logic.function.iterate
+import tactic
+
+example {G : Type} [group G] (a b : G) :
+  (a * b * a⁻¹) * (a * b * a * b^2)⁻¹ * (a * b * a⁻¹)⁻¹ *
+  (b⁻¹ * a⁻¹) * (a * b * a * b^2) * (b⁻¹ * a⁻¹)⁻¹ = a * b * a⁻¹ * b⁻¹  :=
+begin
+  simp [mul_assoc, pow_succ],
+
+end
+
+lemma F {G : Type} [group G] (a b c : G) (ha : a^2 = 1) (hb : b^3 = 1)
+  (hr : c * a * c⁻¹ = b) : a = 1 :=
+begin
+  subst hr,
+  simp [pow_succ, mul_assoc] at *,
+
+end
+
+
+def h : (ℕ → bool) → bool × (ℕ → bool) :=
+λ s, (s 0, s ∘ nat.succ)
+
+variables {X : Type} (f : X → bool × X)
+
+def UMP (x : X) (n : ℕ) : bool :=
+(f ((prod.snd ∘ f)^[n] x)).1
+
+lemma commutes : h ∘ UMP f = λ x, ((f x).1, (UMP f (f x).2)) :=
+begin
+  ext,
+  { simp [h, UMP] },
+  { simp [h, UMP] }
+end
+
+lemma uniqueness (W : X → (ℕ → bool)) (hW : ∀ x, h (W x) = ((f x).1, (W (f x).2))) :
+  W = UMP f :=
+begin
+  ext x n,
+  unfold UMP h at *,
+  simp only [prod.ext_iff, function.funext_iff, function.comp_apply] at hW,
+  induction n with n ih generalizing x,
+  { simp [(hW x).1] },
+  { simp [(hW x).2, ih] }
+end
+
+#exit
+import data.list.basic
+
+variables {α : Type*}
+
+inductive count_at_least (a : α) : ℕ → list α → Prop
+| nil : count_at_least 0 []
+| cons_self {n l} : count_at_least n l → count_at_least (n + 1) (a :: l)
+| cons {b n l} : count_at_least n l → count_at_least n (b :: l)
+
+inductive duplicate (a : α) : list α → Prop
+| cons_mem {l} : a ∈ l → duplicate (a :: l)
+| cons_duplicate {b l} : duplicate l → duplicate (b :: l)
+
+#exit
+open nat
+example (a b : ℕ) (h : succ a = succ b) : a = b :=
+show a = @nat.rec (λ n, ℕ) 0 (λ n _, n) (succ b),
+from h ▸ rfl
+
+variables
+  (formula : Type)
+  (T_proves : formula → Prop)
+  (is_true : formula → formula)
+  (implies : formula → formula → formula)
+  (himplies : ∀ {φ ψ}, T_proves (implies φ ψ) → T_proves φ → T_proves ψ)
+  (and : formula → formula → formula)
+  (handl : ∀ {φ ψ}, T_proves (and φ ψ) → T_proves φ)
+  (handr : ∀ {φ ψ}, T_proves (and φ ψ) → T_proves ψ)
+  (false : formula)
+  (hcons : ¬ T_proves false)
+  (h1 : ∀ {φ}, T_proves φ → T_proves (is_true φ))
+  (h3 : ∀ {φ}, T_proves (is_true φ) → T_proves φ) -- Need Rosser's trick
+  (ρ : formula)
+  (hρ : T_proves (and (implies ρ (implies (is_true ρ) false))
+    (implies (implies ρ false) (is_true ρ))))
+
+include formula T_proves is_true implies and false h1 h3 ρ hρ
+
+lemma rho_not_is_true : ¬ T_proves ρ :=
+assume h : T_proves ρ,
+have T_proves_not_is_true_ρ : T_proves (implies (is_true ρ) false),
+  from himplies (handl hρ) h,
+have T_proves_is_true_ρ : T_proves (is_true ρ),
+  from h1 h,
+have T_proves_false : T_proves false,
+  from himplies T_proves_not_is_true_ρ T_proves_is_true_ρ,
+hcons T_proves_false
+
+lemma not_rho_not_is_true : ¬ T_proves (implies ρ false) :=
+assume h : T_proves (implies ρ false),
+have T_proves_is_true_ρ : T_proves (is_true ρ),
+  from himplies (handr hρ) h,
+have T_proves_ρ : T_proves ρ,
+  from h3 T_proves_is_true_ρ,
+have T_proves_false : T_proves false,
+  from himplies h T_proves_ρ,
+hcons T_proves_false
+
+#reduce not_rho_not_is_true
+
+#exit
+
+#eval quot.unquot ((finset.univ : finset (zmod 3 × zmod 3 × zmod 3)).filter
+(λ x: (zmod 3 × zmod 3 × zmod 3), 5 * x.1^2 - 7 * x.2.1^2 + x.2.2 ^ 2 = 0)).1
+
+#exit
+#eval let c : ℚ := 1 in let d : ℚ := -2 in
+  c * d * (c + d)
+
+example (a b c d : ℝ) (h : 0 < c * d * (c + d)) :
+  (a + b)^2 / (c + d) ≤ a^2 / c + b^2 / d :=
+sub_nonneg.1 $
+  calc 0 ≤ (a * d - b * c) ^ 2 / (c * d * (c + d)) :
+    div_nonneg (pow_two_nonneg _) (le_of_lt h)
+  ... = _ : begin
+    have hc0 : c ≠ 0, from λ h, by simp [*, lt_irrefl] at *,
+    have hd0 : d ≠ 0, from λ h, by simp [*, lt_irrefl] at *,
+    have hcd0 : c + d ≠ 0, from λ h, by simp [*, lt_irrefl] at *,
+    field_simp [hc0, hd0, hcd0],
+    ring
+  end
+
+#exit
+import group_theory.perm.basic
+import group_theory.subgroup
+
+open equiv
+
+example (p : Prop) : ¬(¬p ∧ ¬¬p) :=
+λ h, h.2 h.1
+
+
+
+example (x y z : perm bool)
+  (a : subgroup.closure ({(x * y * z)} : set (perm bool)))
+  (b : subgroup.closure ({(x * (y * z))} : set (perm bool))) :
+  a * a = b * b :=
+begin
+
+end
+
+
+example {G : Type} [group G] (x y z : G)
+  (a : subgroup.closure ({(x * y * z)} : set G))
+  (b : subgroup.closure ({(x * (y * z))} : set G)) :
+  a * a = b * b :=
+begin
+
+end
+
+
+
+
+example {A : Type*} (f : set A → A) (h : function.injective f) : false :=
+let s := f '' {y | f y ∉ y} in
+have h1 : f s ∉ s, from
+  λ hs, Exists.rec (λ t ht, ht.1 (eq.rec hs (h ht.2).symm)) hs,
+have h2 : f s ∈ s, from ⟨s, h1, eq.refl _⟩,
+h1 h2
+
+#print X
+
+#exit
+inductive myheq {α : Type} : ∀ {β : Type}, α → β → Type
+| refl (a : α) : myheq a a
+
+lemma heq_refl {α} {a b : α} (h : myheq a b) : myheq (myheq.refl a) h :=
+  @myheq.rec α (λ α' a a' h', myheq (myheq.refl a) h') (λ a, myheq.refl (myheq.refl a)) α a b h
+
+def myeq {α : Type} (a b : α) : Type := myheq a b
+
+lemma eq_irrel {α} {a b : α} (h₁ h₂ : myeq a b) : myeq h₁ h₂ :=
+  @myheq.rec α (λ α a b h₁, ∀ h₂, myeq h₁ h₂) (λ a h₂, heq_refl h₂) α a b h₁ h₂
+
+#exit
+import data.list.chain
+
+section monoids
+
+-- given a family of monoids, where both the monoids and the indexing set have decidable equality.
+variables {ι : Type*} (G : Π i : ι, Type*) [Π i, monoid (G i)]
+  [decidable_eq ι] [∀ i, decidable_eq (G i)]
+
+-- The coproduct of our monoids.
+@[derive decidable_eq]
+def coprod : Type* := { l : list (Σ i, { g : G i // g ≠ 1 }) // (l.map sigma.fst).chain' (≠) }
+variable {G}
+
+-- `w.head_isn't i` says that `i` is not the head of `w`.
+def coprod.head_isn't (w : coprod G) (i : ι) : Prop := ∀ p ∈ (w.val.map sigma.fst).head', i ≠ p
+
+section cases
+-- here we define a custom eliminator for `coprod`. The idea is we have an index `i`, and
+-- want to say that every `w : coprod G` either (1) doesn't have `i` as its head, or (2) is `g * w'`
+-- for some `g : G i`, where `w'` doesn't have `i` as its head.
+variables {i : ι} {C : coprod G → Sort*}
+  (d1 : Π w : coprod G, w.head_isn't i → C w)
+  (d2 : Π (w : coprod G) (h : w.head_isn't i) (g), C ⟨⟨i, g⟩ :: w.val, w.property.cons' h⟩)
+include d1 d2
+
+def coprod_cases : Π w : coprod G, C w
+| w@⟨[], _⟩ := d1 w $ by rintro _ ⟨⟩
+| w@⟨⟨j, g⟩ :: ls, h⟩ := if ij : i = j then by { cases ij, exact d2 ⟨ls, h.tail⟩ h.rel_head' g }
+else d1 w $ by { rintro _ ⟨⟩ ⟨⟩, exact ij rfl }
+
+variables {d1 d2}
+
+-- computation rule for the first case of our eliminator
+lemma beta1 : ∀ (w : coprod G) h, (coprod_cases d1 d2 w : C w) = d1 w h
+| ⟨[], _⟩ h := rfl
+| ⟨⟨j, g⟩ :: ls, hl⟩ h := by { rw [coprod_cases, dif_neg], exact h j rfl }
+
+-- computation rule for the second case of our eliminator
+lemma beta2 (w : coprod G) (h : w.head_isn't i) (g) {x} :
+  (coprod_cases d1 d2 ⟨⟨i, g⟩ :: w.val, x⟩ : C ⟨⟨i, g⟩ :: w.val, x⟩) = d2 w h g :=
+by { rw [coprod_cases, dif_pos rfl], cases w, refl }
+
+end cases
+
+-- prepend `g : G i` to `w`, assuming `i` is not the head of `w`.
+def rcons' {i : ι} (g : G i) (w : coprod G) (h : w.head_isn't i) : coprod G :=
+if g_one : g = 1 then w else ⟨⟨i, g, g_one⟩ :: w.val, w.property.cons' h⟩
+
+-- prepend `g : G i` to `w`. NB this is defined in terms of `rcons'`: this will be a recurring theme.
+def rcons {i : ι} (g : G i) : coprod G → coprod G :=
+coprod_cases (rcons' g) (λ w h g', rcons' (g * ↑g') w h)
+
+-- computation rules for `rcons`
+lemma rcons_def1 {i : ι} {g : G i} {w : coprod G} (h) : rcons g w = rcons' g w h := beta1 _ _
+lemma rcons_def2 {i : ι} {g : G i} {w : coprod G} (h) (g') {x} :
+  rcons g ⟨⟨i, g'⟩ :: w.val, x⟩ = rcons' (g * ↑g') w h := beta2 _ _ _
+
+-- prepending one doesn't change our word
+lemma rcons_one {i : ι} : ∀ w : coprod G, rcons (1 : G i) w = w :=
+begin
+  apply coprod_cases,
+  { intros w h, rw [rcons_def1 h, rcons', dif_pos rfl], },
+  { rintros w h ⟨g, hg⟩, rw [rcons_def2 h, one_mul, rcons', dif_neg], refl, }
+end
+
+-- preliminary for `rcons_mul`
+private lemma rcons_mul' {i : ι} {g g' : G i} {w : coprod G} (h : w.head_isn't i) :
+  rcons (g * g') w = rcons g (rcons g' w) :=
+begin
+  rw [rcons_def1 h, rcons_def1 h, rcons', rcons'],
+  split_ifs,
+  { rw [h_2, mul_one] at h_1, rw [h_1, rcons_one], },
+  { rw [rcons_def2 h, rcons', dif_pos], exact h_1, },
+  { rw [rcons_def1 h, rcons', dif_neg], { congr, rw [h_2, mul_one], }, simpa [h_2] using h_1, },
+  { rw [rcons_def2 h, rcons', dif_neg], refl, },
+end
+
+-- we can prepend `g * g'` one element at a time.
+lemma rcons_mul {i : ι} (g : G i) (g' : G i) : ∀ w, rcons (g * g') w = rcons g (rcons g' w) :=
+begin
+  apply coprod_cases,
+  { apply rcons_mul', },
+  { intros w h g'', rw [rcons_def2 h, rcons_def2 h, mul_assoc,
+    ←rcons_def1, rcons_mul' h, ←rcons_def1] }
+end
+
+-- Every `G i` thus acts on the coproduct.
+@[simps] instance bar (i) : mul_action (G i) (coprod G) :=
+{ smul := rcons, one_smul := rcons_one, mul_smul := rcons_mul }
+
+-- Prepending a letter to a word means acting on that word. This will be useful for proofs by
+-- induction on words.
+lemma cons_as_smul {i} {g} (ls) (hl) :
+ (⟨⟨i, g⟩ :: ls, hl⟩ : coprod G) = (g.val • ⟨ls, hl.tail⟩ : coprod G) :=
+begin
+  rw [bar_to_has_scalar_smul, rcons_def1, rcons', dif_neg g.property],
+  { congr, ext, refl, }, { exact hl.rel_head', },
+end
+
+section action
+-- Given actions of `G i` on `X`, the coproduct also has a scalar action on `X`. We'll use this
+-- both to define multiplication in the coproduct, and to get its universal property.
+variables {X : Type*} [∀ i, mul_action (G i) X]
+
+instance foo : has_scalar (coprod G) X := ⟨λ g x, g.val.foldr (λ l y, l.snd.val • y) x⟩
+
+-- preliminary for `foobar`.
+private lemma foobar' {i} {g : G i} {x : X} {w : coprod G} (h : w.head_isn't i) :
+  (rcons g w) • x = g • (w • x) :=
+by { rw [rcons_def1 h, rcons'], split_ifs, { rw [h_1, one_smul], }, { refl, }, }
+
+-- (I'm not sure it's worth it to use these typeclasses, since Lean gets a bit confused by them...)
+instance foobar (i) : is_scalar_tower (G i) (coprod G) X :=
+⟨begin
+  intros g' w x, revert w,
+  apply coprod_cases,
+  { apply foobar', },
+  { intros w h g, rw [bar_to_has_scalar_smul, rcons_def2 h, ←rcons_def1 h,
+    foobar' h, mul_smul], refl, }
+end⟩
+
+end action
+
+instance coprod_monoid : monoid (coprod G) :=
+{ mul := λ x y, x • y,
+  mul_assoc := begin
+    rintros ⟨ls, hl⟩ b c,
+    change (_ • _) • _ = _ • (_ • _),
+    induction ls with p ls ih,
+    { refl, },
+    cases p with i g,
+    rw [cons_as_smul, smul_assoc g.val _ b, smul_assoc, ih, smul_assoc],
+    apply_instance, -- ??
+  end,
+  one := ⟨[], list.chain'_nil⟩,
+  one_mul := λ _, rfl,
+  mul_one := begin
+    rintro ⟨ls, hl⟩,
+    change _ • _ = _,
+    induction ls with p ls ih,
+    { refl },
+    cases p with i g,
+    rw [cons_as_smul, smul_assoc, ih],
+  end }
+
+def of {i} : G i →* coprod G :=
+{ to_fun := λ g, g • 1,
+  map_one' := rcons_one _,
+  map_mul' := by { intros, change rcons _ _ = _ • _, rw [rcons_mul, smul_assoc], refl } }
+
+lemma cons_as_mul {i} {g} (ls) (h) :
+ (⟨⟨i, g⟩ :: ls, h⟩ : coprod G) = (of g.val * ⟨ls, h.tail⟩ : coprod G) :=
+by { convert cons_as_smul ls h, change (_ • _) • _ = _, rw smul_assoc g.val, congr, apply_instance }
+
+def ump (X : Type*) [monoid X] :
+  (Π {i}, G i →* X) ≃ (coprod G →* X) :=
+{ to_fun := λ fi, begin
+    letI : ∀ i, mul_action (G i) X := λ i, mul_action.comp_hom _ fi,
+    refine { to_fun := λ g, g • 1, map_one' := rfl, map_mul' := _ },
+    rintros ⟨ls, hl⟩ b,
+    change (_ • _) • _ = _,
+    induction ls with p ls ih,
+    { exact (one_mul _).symm },
+    cases p with i g,
+    rw [cons_as_smul, smul_assoc g.val _ b, smul_assoc, ih, smul_assoc],
+    { symmetry, apply mul_assoc, },
+    { apply_instance },
+  end,
+  inv_fun := λ f i, f.comp of,
+  left_inv := begin
+    intro fi, letI : ∀ i, mul_action (G i) X := λ i, mul_action.comp_hom _ fi,
+    ext i g, change (g • (1 : coprod G)) • (1 : X) = fi g,
+    rw smul_assoc, apply mul_one,
+  end,
+  right_inv := begin
+    intro f,
+    ext w,
+    cases w with ls hl,
+    change _ • 1 = f ⟨ls, hl⟩,
+    induction ls with p ls ih,
+    { exact f.map_one.symm },
+    cases p with i g,
+    conv_rhs { rw [cons_as_mul, f.map_mul] },
+    letI : ∀ i, mul_action (G i) X := λ i, mul_action.comp_hom _ (f.comp of),
+    rw [cons_as_smul, smul_assoc, ih], refl
+  end }
+
+lemma prod_eq_self (w : coprod G) : list.prod (w.val.map (λ l, of l.snd.val)) = w :=
+begin
+  cases w with ls hl, induction ls with p ls ih,
+  { refl, }, { cases p, rw [list.map_cons, list.prod_cons, ih hl.tail, cons_as_mul], },
+end
+
+end monoids
+
+-- we now do the case of groups.
+variables {ι : Type*} {G : Π i : ι, Type*} [Π i, group (G i)]
+  [decidable_eq ι] [∀ i, decidable_eq (G i)]
+
+@[simps]
+instance coprod_inv : has_inv (coprod G) :=
+⟨λ w, ⟨list.reverse (w.val.map $ λ l, ⟨l.fst, l.snd.val⁻¹, inv_ne_one.mpr l.snd.property⟩),
+  begin
+    rw [list.map_reverse, list.chain'_reverse, list.map_map, function.comp],
+    convert w.property, ext, exact ne_comm,
+  end⟩⟩
+
+instance : group (coprod G) :=
+{ mul_left_inv := begin
+    intro w, -- possibly this should all be deduced from some more general result
+    conv_lhs { congr, rw ←prod_eq_self w⁻¹, skip, rw ←prod_eq_self w },
+    cases w with ls _,
+    rw [subtype.val_eq_coe, coprod_inv_inv_coe, list.map_reverse, list.map_map],
+    dsimp only,
+    induction ls with p ls ih,
+    { apply mul_one, },
+    rw [list.map_cons, list.reverse_cons, list.prod_append, list.map_cons, list.prod_cons,
+      list.prod_nil, mul_one, function.comp_apply, mul_assoc, list.prod_cons,
+      ←mul_assoc _ (of p.snd.val), ←of.map_mul, mul_left_inv, of.map_one, one_mul, ih],
+  end,
+  ..coprod_inv,
+  ..coprod_monoid }
+
+#exit
+import group_theory.semidirect_product
+import group_theory.free_group
+
+open free_group multiplicative semidirect_product
+
+universes u v
+
+def free_group_hom_ext {α G : Type*} [group G] {f g : free_group α →* G}
+  (h : ∀ a : α, f (of a) = g (of a)) (w : free_group α) : f w = g w :=
+free_group.induction_on w (by simp) h (by simp) (by simp {contextual := tt})
+
+def free_group_equiv {α β : Type*} (h : α ≃ β) : free_group α ≃* free_group β :=
+{ to_fun := free_group.map h,
+  inv_fun := free_group.map h.symm,
+  left_inv := λ w, begin rw [← monoid_hom.comp_apply],
+    conv_rhs {rw ← monoid_hom.id_apply (free_group α) w},
+     exact free_group_hom_ext (by simp) _ end,
+  right_inv := λ w, begin rw [← monoid_hom.comp_apply],
+    conv_rhs {rw ← monoid_hom.id_apply (free_group β) w},
+     exact free_group_hom_ext (by simp) _ end,
+  map_mul' := by simp }
+
+def free_group_perm {α : Type u} : equiv.perm α →* mul_aut (free_group α) :=
+{ to_fun := free_group_equiv,
+  map_one' := by ext; simp [free_group_equiv],
+  map_mul' := by intros; ext; simp [free_group_equiv, ← free_group.map.comp] }
+
+def phi : multiplicative ℤ →* mul_aut (free_group (multiplicative ℤ)) :=
+(@free_group_perm (multiplicative ℤ)).comp
+  (mul_action.to_perm (multiplicative ℤ) (multiplicative ℤ))
+
+example : free_group bool ≃* free_group (multiplicative ℤ) ⋊[phi] multiplicative ℤ :=
+{ to_fun := free_group.lift (λ b, cond b (inl (of (of_add (0 : ℤ)))) (inr (of_add (1 : ℤ)))),
+  inv_fun := semidirect_product.lift
+    (free_group.lift (λ a, of ff ^ (to_add a) * of tt * of ff ^ (-to_add a)))
+    (gpowers_hom _ (of ff))
+    begin
+      assume g,
+      ext,
+      apply free_group_hom_ext,
+      assume b,
+      simp only [mul_equiv.coe_to_monoid_hom,
+        gpow_neg, function.comp_app, monoid_hom.coe_comp, gpowers_hom_apply,
+        mul_equiv.map_inv, lift.of, mul_equiv.map_mul, mul_aut.conj_apply, phi,
+        free_group_perm, free_group_equiv, mul_action.to_perm,
+        units.smul_perm_hom, units.smul_perm],
+      dsimp [free_group_equiv, units.smul_perm],
+      simp [to_units, mul_assoc, gpow_add]
+    end,
+  left_inv := λ w, begin
+    conv_rhs { rw ← monoid_hom.id_apply _ w },
+    rw [← monoid_hom.comp_apply],
+    apply free_group_hom_ext,
+    intro a,
+    cases a; refl,
+  end,
+  right_inv := λ s, begin
+    conv_rhs { rw ← monoid_hom.id_apply _ s },
+    rw [← monoid_hom.comp_apply],
+    refine congr_fun (congr_arg _ _) _,
+    apply semidirect_product.hom_ext,
+    { ext,
+      { simp only [right_inl, mul_aut.apply_inv_self, mul_right,
+          mul_one, monoid_hom.map_mul, gpow_neg, lift_inl,
+          mul_left, function.comp_app, left_inl, cond, monoid_hom.map_inv,
+          monoid_hom.coe_comp, monoid_hom.id_comp, of_add_zero,
+          inv_left, lift.of, phi, free_group_perm, free_group_equiv,
+          mul_action.to_perm, units.smul_perm_hom, units.smul_perm],
+        dsimp [free_group_equiv, units.smul_perm],
+        simp,
+        simp only [← monoid_hom.map_gpow],
+        simp [- monoid_hom.map_gpow],
+        rw [← int.of_add_mul, one_mul],
+        simp [to_units] },
+      { simp } },
+    { apply monoid_hom.ext_mint,
+      refl }
+  end,
+  map_mul' := by simp }
+
+#exit
+
+open equiv set nat
+
+variables {S : set ℕ} (π : perm S) (x : S)
+set_option trace.simplify.rewrite true
+lemma set_S_wf {α : Type*} [group α] (a b c : α) (hab : c * a⁻¹ = c * b⁻¹) : a = b :=
+by simp * at *
+
+#print set_S_wf
+
+#exit
+import tactic.rcases
+
+universes u
+
+inductive word₀
+| blank : word₀
+| concat : word₀ → word₀ → word₀
+
+open word₀
+infixr ` □ `:80 := concat
+
+@[simp] lemma ne_concat_self_left : ∀ u v, u ≠ u □ v
+| blank    v h := word₀.no_confusion h
+| (u □ u') v h := ne_concat_self_left u u' (by injection h)
+
+@[simp] lemma ne_concat_self_right : ∀ u v, v ≠ u □ v
+| u blank    h := word₀.no_confusion h
+| u (v □ v') h := ne_concat_self_right v v' (by injection h)
+
+@[simp] lemma concat_ne_self_right (u v : word₀) : u □ v ≠ v :=
+(ne_concat_self_right _ _).symm
+
+@[simp] lemma concat_ne_self_left (u v : word₀) : u □ v ≠ u :=
+(ne_concat_self_left _ _).symm
+
+inductive hom₀ : word₀ → word₀ → Sort*
+| α_hom : ∀ (u v w : word₀), hom₀ ((u □ v) □ w) (u □ (v □ w))
+| α_inv : ∀ (u v w : word₀), hom₀ (u □ (v □ w)) ((u □ v) □ w)
+| tensor_id : ∀ {u v} (w), hom₀ u v → hom₀ (u □ w) (v □ w)
+| id_tensor : ∀ (u) {v w}, hom₀ v w → hom₀ (u □ v) (u □ w)
+
+inductive hom₀.is_directed : ∀ {v w}, hom₀ v w → Prop
+| α : ∀ {u v w}, hom₀.is_directed (hom₀.α_hom u v w)
+| tensor_id : ∀ (u) {v w} (s : hom₀ v w), hom₀.is_directed s →
+  hom₀.is_directed (hom₀.tensor_id u s)
+| id_tensor : ∀ {u v} (w) (s : hom₀ u v), hom₀.is_directed s →
+  hom₀.is_directed (hom₀.id_tensor w s)
+
+lemma hom₀.ne {u v} (s : hom₀ u v) : u ≠ v :=
+by induction s; simp *
+
+lemma hom₀.subsingleton_aux :
+  ∀ {u v u' v'} (hu : u = u') (hv : v = v')
+    (s : hom₀ u v) (s' : hom₀ u' v'), s.is_directed →
+    s'.is_directed → s == s' :=
+begin
+  assume u v u' v' hu hv s s' hs hs',
+  induction hs generalizing u' v',
+  { cases hs',
+    { simp only at hu hv,
+      rcases hu with ⟨⟨rfl, rfl⟩, rfl⟩,
+      refl },
+    { simp only at hu hv,
+      rcases hu with ⟨rfl, rfl⟩,
+      simp * at * },
+    { simp only at hu hv,
+      rcases hu with ⟨rfl, rfl⟩,
+      simp * at * } },
+  { cases hs',
+    { simp only at hu hv,
+      rcases hu with ⟨⟨rfl, rfl⟩, rfl⟩,
+      simp * at * },
+    { simp only at hu hv,
+      rcases hu with ⟨rfl, rfl⟩,
+      rcases hv with ⟨rfl, _⟩,
+      simp only [heq_iff_eq],
+      rw [← heq_iff_eq],
+      exact hs_ih rfl rfl _ (by assumption) },
+    { simp only at hu hv,
+      rcases hu with ⟨rfl, rfl⟩,
+      rcases hv with ⟨rfl, rfl⟩,
+      exact (hom₀.ne hs'_s rfl).elim } },
+  { cases hs',
+    { simp only at hu hv,
+      rcases hu with ⟨⟨rfl, rfl⟩, rfl⟩,
+      simp * at * },
+    { simp only at hu hv,
+      rcases hu with ⟨rfl, rfl⟩,
+      rcases hv with ⟨rfl, rfl⟩,
+      exact (hom₀.ne hs'_s rfl).elim },
+    { simp only at hu hv,
+      rcases hu with ⟨rfl, rfl⟩,
+      rcases hv with ⟨_, rfl⟩,
+      simp only [heq_iff_eq],
+      rw [← heq_iff_eq],
+      exact hs_ih rfl rfl _ (by assumption) } }
+end
+
+lemma hom₀.subsingleton {u v}
+  (s s' : hom₀ u v) (hs : s.is_directed)
+  (hs' : s'.is_directed) : s = s' :=
+eq_of_heq (hom₀.subsingleton_aux rfl rfl _ _ hs hs')
+
+#exit
+import order.conditionally_complete_lattice
+import order.lattice_intervals
+
+lemma Z {X : Type} [conditionally_complete_lattice X] [densely_ordered X]
+  (a b : X) (h : a < b) : Inf (set.Ioc a b) = a :=
+le_antisymm
+  begin
+    by_contra h1,
+    set s := (Inf (set.Ioc a b)) ⊔ a,
+    have has : a < s, from lt_iff_le_not_le.2
+      ⟨le_sup_right, λ hsa, h1 (le_trans le_sup_left hsa)⟩,
+    rcases densely_ordered.dense _ _ has with ⟨c, hac, hcs⟩,
+    have hIb : Inf (set.Ioc a b) ≤ b, from cInf_le bdd_below_Ioc (set.mem_Ioc.2 ⟨h, le_refl _⟩),
+    have hsb : s ≤ b, from sup_le hIb (le_of_lt h),
+    have hIc : Inf (set.Ioc a b) ≤ c, from cInf_le bdd_below_Ioc
+      (set.mem_Ioc.2 ⟨hac, le_of_lt (lt_of_lt_of_le hcs hsb)⟩),
+    have hsc : s ≤ c, from sup_le hIc (le_of_lt hac),
+    exact not_le_of_gt hcs hsc,
+  end
+  (le_cInf ⟨b, set.mem_Ioc.2 ⟨h, le_refl _⟩⟩
+    (λ c hc, le_of_lt (set.mem_Ioc.1 hc).1))
+#print Z
+#exit
+class group (set : Type) :=
+(add: set → set → set)
+
+structure group_obj :=
+(set : Type)
+(group : group set)
+
+instance coe_to_sort : has_coe_to_sort group_obj :=
+{ S := Type,
+  coe := group_obj.set }
+
+instance group_obj_group (G : group_obj) : group G := G.group
+
+infix `+` := group.add
+
+structure group_morphism (G H : group_obj) :=
+(f: G → H)
+(additive: ∀ g h : G.set, f(g + h) = (f g) + (f h))
+
+
+#exit
+
+import algebra.field
+import tactic
+
+example {R : Type} [linear_ordered_field R] (d : R) : d * (d + 3) / 2 = (d + 2) * (d + 1) / 2 - 1 :=
+begin
+  ring,
+
+end
+
+theorem thm (a b : ℤ) : a * (1 + b) - a = a * b :=
+(mul_add a 1 b).symm ▸ (mul_one a).symm ▸ add_sub_cancel' a (a * b)
+
+example : ∀ p q : Prop, p ∧ q → q ∧ p :=
+λ (p q : Prop) (h : p ∧ q), and.intro (and.right h) (and.left h)
+
+import algebra.ring algebra.group_power
+import tactic
+
+example {R : Type} [comm_ring R] (x : R) (hx : x^2 + x + 1 = 0) :
+  x^4 = x :=
+calc x^4 = x ^ 4 + x * (x ^ 2 + x + 1) : by rw hx; ring
+... = x * (x ^ 2 + 1) * (x + 1) : by ring
+... = _ : _
+
+lemma lem1 {R : Type} [semiring R] {T : R} (hT : T = T^2 + 1) (n : ℕ) :
+  T^n.succ = T^n.succ.succ + T^n :=
+calc T ^ n.succ = T ^ n * (T ^ 2 + 1) : by rw [← hT, pow_succ']
+... = _ : by simp only [pow_succ', pow_zero, one_mul, mul_assoc, mul_add, mul_one]
+
+lemma lem2 {R : Type} [semiring R] {T : R} (hT : T = T^2 + 1) (k : ℕ) :
+  T^(k + 3) + T ^ k + T = T :=
+begin
+  induction k with k ih,
+  { conv_rhs { rw [hT, pow_two], congr, congr, rw hT },
+    simp [pow_succ, mul_assoc, add_assoc, add_mul, add_comm, add_left_comm] },
+  { calc T ^ (k + 4) + T ^ (k + 1) + T
+        = T ^ (k + 4) + T ^ (k + 1) + (T ^ 2 + 1) : by rw [← hT]
+    ... = (T ^ (k + 3) + T ^ k + T) * T + 1 :
+      by simp only [pow_succ', one_mul, pow_zero, mul_assoc, add_mul, mul_one,
+        add_assoc]
+    ... = T^2 + 1 : by rw ih; simp only [pow_succ', one_mul, pow_zero, mul_assoc, add_mul, mul_one,
+        add_assoc]
+    ... = T : hT.symm }
+end
+
+lemma lem3 {R : Type} [semiring R] {T : R} (hT : T = T^2 + 1) (n k : ℕ) :
+  T^(k + 3) + T ^ k + T ^ (n + 1) = T ^ (n + 1) :=
+begin
+  induction n with n ih,
+  { rw [zero_add, pow_one, lem2 hT] },
+  { rw [lem1 hT n.succ, add_comm _ (T ^ n.succ), ← add_assoc, ih] }
+end
+
+lemma lem4 {R : Type} [semiring R] {T : R} (hT : T = T^2 + 1) : T^7 = T :=
+calc T ^ 7 = T ^ 7 + T ^ 4 + T ^ 1 :
+  by conv_lhs { rw [← lem3 hT 6 1] };
+    simp only [pow_succ', one_mul, pow_zero, mul_assoc, add_mul, mul_one, add_assoc, add_comm]
+... = _ : by rw lem3 hT 0 4; simp
+
+example {R : Type} [comm_ring R] (T : R) (hT : T = T^2 + 1) : T^7 = T :=
+calc T ^ 7 = (T ^ 8 + T ^ 7 + (T ^ 6 + T ^ 4) + (T ^ 5 + T ^ 3) + T ^ 2 + 1) : begin
+  conv_lhs { rw [lem1 hT 6, lem1 hT 5, lem1 hT 4, lem1 hT 3, lem1 hT 2, lem1 hT 1, lem1 hT 0] },
+  ring_exp,
+end
+... = T^8 + (T ^ 7 + T ^ 5) + T ^ 4 + T ^ 3 + T + 1 : begin
+  rw [← lem1 hT 3, ← lem1 hT 4, lem1 hT 1],
+  ring_exp,
+end
+... = (T ^ 8 + T ^ 6) + T ^ 4 + T ^ 3 + T + 1 :
+  begin
+    rw [← lem1 hT 5],
+  end
+... = T ^ 7 + T ^ 4 + T ^ 3 + T + 1 :
+  begin
+    rw [← lem1 hT 6],
+
+  end
+
+
+example {R : Type} [comm_semiring R] (T : R) (hT : T = T^2 + 1) : T^7 = T :=
+calc T^7 = T^6 * T : by ring
+... = T^6 * (T^2 + 1) :
+
+
+example {R : Type} [comm_ring R] (T : R) (hT : T = T^2 + 1) :
+  T^7 = T :=
+calc T ^ 7 = T * ((T^2 + 1)^2 - T^2) * (T + 1) * (T - 1) + T : by ring
+... = 1 : begin
+  rw ← hT,  ring
+
+end
+
+example {R : Type} [comm_ring R] (T : R) (hT : T = T^2 + 1) :
+  T^7 = T :=
+calc T ^ 7 = T * (T^2 + T + 1) * (T^2 - T + 1) * (T + 1) * (T - 1) + T : by ring
+... = _ : sorry
+
+example {R : Type} [comm_semiring R] (T : R) (hT : T = T^2 + 1) :
+  T^7 = T :=
+calc T ^ 7 = T ^ 3 * T ^ 3 : by simp[pow_succ, mul_assoc]
+... = (T ^ 2 + 1)^3 * T^3 : by rw ← hT
+... = _ : begin
+  ring_exp,
+
+end
+
+
+#exit
+import logic.basic
+
+def type_of {α  : Sort*} (a : α) := α
+
+#reduce type_of $ type_of $ type_of @flip
+#reduce type_of $ type_of $ @flip (type_of @flip) (type_of @flip) (type_of @flip)
+#exit
+import data.real.nnreal
+import algebra.big_operators
+import topology.algebra.infinite_sum
+import tactic
+import order.lexicographic
+
+open_locale nnreal big_operators
+
+def mask_fun (f : ℕ → ℝ≥0) (mask : ℕ → Prop) [∀ n, decidable (mask n)] : ℕ → ℝ≥0 :=
+λ n, if mask n then f n else 0
+
+lemma exists_smul_le_sum {α M : Type*} [linear_ordered_cancel_add_comm_monoid M] (s : finset α)
+  (hs : s.nonempty) (f : α → M) : ∃ a ∈ s, finset.card s •ℕ f a ≤ ∑ x in s, f x :=
+begin
+  classical,
+  induction s using finset.induction_on with a s has ih,
+  { cases hs with a ha,
+    exact ⟨a, by simp *⟩ },
+  { simp only [finset.card_insert_of_not_mem has, finset.sum_insert has, succ_nsmul],
+    by_cases hs : s.nonempty,
+    { rcases ih hs with ⟨b, hbs, hs⟩,
+      by_cases f a ≤ f b,
+      { use [a, by simp],
+        exact add_le_add (le_refl _) (le_trans (nsmul_le_nsmul_of_le_right h _) hs) },
+      { use [b, finset.mem_insert_of_mem hbs],
+        exact add_le_add (le_of_not_le h) hs } },
+    { use a,
+      simp [(finset.eq_empty_or_nonempty s).resolve_right hs] } },
+end
+
+lemma exists_partition (N : ℕ) (hN : 0 < N) (f : ℕ → ℝ≥0) (hf : ∀ n, f n ≤ 1) :
+  ∃ (m : ℕ), f m ≤ (∑' n, f n) / N + 1 :=
+begin
+  split,
+  { rintros ⟨mask, _, h₁, h₂⟩,
+    cases h₁ 0 with m hm,
+    use m, dsimp at *,
+         }
+end
+
+#exit
+import data.real.nnreal
+import algebra.big_operators
+import data.list.min_max
+import tactic
+
+open_locale nnreal
+open_locale big_operators
+
+
+
+
+#exit
+instance (n : ℕ) (h : 0 < n) : denumerable (fin n × ℕ) :=
+@denumerable.of_encodable_of_infinite _ _
+  (infinite.of_injective (λ i : nat, (fin.mk 0 h, i))
+    (λ _ _, by simp))
+
+
+
+#exit
+import tactic
+
+set_option profiler true
+example {R : Type} [comm_ring R] (α β γ : R)
+  (h : α + β + γ = 0):
+  (α - β)^2 * (α - γ)^2 * (β - γ)^2 =
+  -4 * (α * β + β * γ + α * γ) ^3- 27 * (α * β * γ)^2 :=
+begin
+  rw [add_assoc, add_eq_zero_iff_eq_neg] at h,
+  subst h,
+  ring,
+end
+
+
+#print buffer
+
+def fast_choose (n k : ℕ) : ℕ :=
+n.factorial / ((n - k).factorial * k.factorial)
+
+def C : ℕ → buffer ℕ
+| 0 := buffer.nil.push_back 1
+| 1 := (C 0).push_back 1
+| n@(x+1) :=
+  let n2 := (n * x) / 2 in
+  let C := C x in
+  let b : ℕ:= 2^n2 - ((list.fin_range x).map
+    (λ m : fin x, have h : m.val < x, from m.2,
+      let nx : ℕ := x - m  in
+      fast_choose x m * C.read' (m + 1) * 2^
+        (((nx - 1) * nx) / 2))).sum in
+  C.push_back b
+
+def list_digits_to_string : list ℕ → string :=
+λ l, l.foldl (λ s n, repr n ++ s) ""
+
+#eval let n :=9 in (nat.digits (n) ((C n).read' n)).reverse
+
+
+#exit
+import logic.basic
+import logic.function.basic
+
+-- term `n` is a function with `n` arguments
+inductive term (α : Type) (arity : α → ℕ) : ℕ → Type
+| func : Π a, term (arity a)
+| var  : ℕ → term 0
+| app  : Π {n : ℕ}, term n.succ → term 0 → term n
+
+variables {α : Type} (arity : α → ℕ)
+
+open term
+
+meta def lt [has_lt α] [decidable_rel (@has_lt.lt α _)] :
+  Π {n m}, term α arity n → term α arity m → bool
+| _ _ (func a) (func b) := a < b
+| _ _ (func a) (var _) := ff
+| n m (func a) (app _ _) := n < m
+| n m (var _) (func _) := if n < m then tt else ff
+| _ _ (var i) (var j) := i < j
+| _ _ (var i) (app _ _) := tt
+| n m (app _ _) (func _) := n < m
+| _ _ (app _ _) (var _) := ff
+| n m (app f x) (app g y) :=
+  cond (lt f g)
+    tt
+    (cond (lt g f)
+      ff
+      (lt x y))
+
+instance (n : ℕ) : has_coe_to_fun (term α arity n.succ) :=
+{ F   := λ _, term α arity 0 → term α arity n,
+  coe := term.app }
+
+def subst (n : ℕ) : term α arity 0 → term α arity 0 →
+
+#exit
+import algebra.group
+
+@[derive decidable_eq, derive has_reflect] inductive gterm : Type
+| X : ℕ → gterm
+| one : gterm
+| mul : gterm → gterm → gterm
+| inv : gterm → gterm
+
+
+meta instance : has_repr gterm := ⟨λ g, (`(%%(reflect g) : gterm)).to_string⟩
+
+instance : has_mul gterm := ⟨gterm.mul⟩
+
+instance : has_one gterm := ⟨gterm.one⟩
+
+instance : has_inv gterm := ⟨gterm.inv⟩
+
+open gterm
+
+inductive geq : gterm → gterm → Type
+| X : ∀ n, geq (X n) (X n)
+| one : geq 1 1
+| mul : ∀ {a b c d}, geq a b → geq c d → geq (a * c) (b * d)
+| inv : ∀ {a b}, geq a b → geq (a⁻¹) (b⁻¹)
+| mul_assoc : ∀ {a b c}, geq (a * b * c) (a * (b * c))
+| one_mul : ∀ a, geq (1 * a) a
+| inv_mul : ∀ a, geq (a⁻¹ * a) 1
+| refl : ∀ (a), geq a a
+| symm : ∀ {a b}, geq a b → geq b a
+| trans : ∀ {a b c}, geq a b → geq b c → geq a c
+
+meta def to_expr (a b : gterm) (h : geq a b) : expr :=
+begin
+  induction h,
+  { exact expr.app (expr.const `geq.refl []) (reflect h) },
+  { exact expr.const `geq.one [] },
+  { exact expr.app (expr.app (expr.app (expr.app (expr.app (expr.app (expr.const `geq.mul []) (reflect h_a)) (reflect h_b))
+      (reflect h_c)) (reflect h_d)) h_ih_ᾰ) h_ih_ᾰ_1 },
+  { exact expr.app (expr.app (expr.app (expr.const `geq.inv []) (reflect h_a)) (reflect h_b)) h_ih },
+  { exact expr.app (expr.app (expr.app (expr.const `geq.mul_assoc []) (reflect h_a))
+      (reflect h_b)) (reflect h_c) },
+  {  exact expr.app (expr.const `geq.one_mul []) (reflect h) },
+  { exact expr.app (expr.const `geq.inv_mul []) (reflect h) },
+  { exact expr.app (expr.const `geq.refl []) (reflect h) },
+  { exact expr.app (expr.app (expr.app (expr.const `geq.symm []) (reflect h_a)) (reflect h_b)) h_ih },
+  { exact expr.app (expr.app (expr.app (expr.app (expr.app (expr.const `geq.trans []) (reflect h_a))
+      (reflect h_b)) (reflect h_c)) h_ih_ᾰ) h_ih_ᾰ_1 }
+end
+
+meta instance (a b : gterm): has_repr (geq a b) :=
+⟨λ g, (to_expr _ _ g).to_string⟩
+
+attribute [refl] geq.refl
+attribute [symm] geq.symm
+attribute [trans] geq.trans
+
+
+/-- `subst a b t` replaces occurences of `a` in `t` with `b` -/
+def subst (a b : gterm) : gterm → gterm
+| (mul x y) :=
+  if a = x
+    then if a = y
+      then b * b
+      else b * subst y
+    else if a = y
+      then subst x * b
+      else subst x * subst y
+| (inv x) :=
+  if a = x
+    then b⁻¹
+    else (subst x)⁻¹
+| (X n) := if a = X n then b else X n
+| 1 := if a = 1 then b else 1
+
+def geq_subst (a b : gterm) (h : geq a b) :
+  ∀ t : gterm, geq t (subst a b t)
+| (mul x y) :=
+  begin
+    dunfold subst,
+    split_ifs;
+    apply geq.mul;
+    try { rw ← h_1 };
+    try { rw ← h_2 };
+    try { exact h };
+    try { exact geq_subst _ }
+  end
+| (inv x) :=
+  begin
+    dunfold subst,
+    split_ifs;
+    apply geq.inv;
+    try { rw ← h_1 };
+    try { exact h };
+    try { exact geq_subst _ }
+  end
+| (X n) :=
+  begin
+    dunfold subst,
+    split_ifs,
+    { rw ← h_1, assumption },
+    { refl }
+  end
+| 1 :=
+  begin
+    dunfold subst,
+    split_ifs,
+    { rw ← h_1, assumption },
+    { refl }
+  end
+
+infixl ` ≡ ` := geq
+
+def geq.mul_inv (x) : geq (x * x⁻¹) 1 :=
+calc x * x⁻¹ ≡ 1 * (x * x⁻¹) : (geq.one_mul _).symm
+... ≡ ((x * x⁻¹)⁻¹ * (x * x⁻¹)) * (x * x⁻¹) :
+  geq.mul (geq.inv_mul _).symm (geq.refl _)
+... ≡ (x * x⁻¹)⁻¹ * ((x * x⁻¹) * (x * x⁻¹)) : geq.mul_assoc
+... ≡ (x * x⁻¹)⁻¹ * (x * x⁻¹) :
+  geq.mul (geq.refl _)
+    (calc (x * x⁻¹) * (x * x⁻¹) ≡ x * (x⁻¹ * (x * x⁻¹)) : geq.mul_assoc
+      ... ≡ x * x⁻¹ : geq.mul (geq.refl _)
+        (geq.mul_assoc.symm.trans ((geq.mul (geq.inv_mul _) (geq.refl _)).trans (geq.one_mul _))))
+... ≡ 1 : (geq.inv_mul _)
+
+def geq.mul_one (x : gterm) : x * 1 ≡ x :=
+calc x * 1 ≡ x * (x⁻¹ * x) : geq.mul (geq.refl _) (geq.inv_mul _).symm
+... ≡ x * x⁻¹ * x : geq.mul_assoc.symm
+... ≡ 1 * x : geq.mul (geq.mul_inv _) (geq.refl _)
+... ≡ x : (geq.one_mul _)
+
+def find_inv_mul : Π {a b : gterm}, geq a b → list gterm
+| _ _ (geq.mul h₁ h₂) := find_inv_mul h₁ ∪ find_inv_mul h₂
+| _ _ (geq.inv h) := find_inv_mul h
+| _ _ (geq.inv_mul x) := [x]
+| _ _ (geq.symm h) := find_inv_mul h
+| _ _ (geq.trans h₁ h₂) := find_inv_mul h₁ ∪ find_inv_mul h₂
+| _ _ (geq.X _) := []
+| _ _ (geq.one) := []
+| _ _ (geq.mul_assoc) := []
+| _ _ (geq.one_mul _) := []
+| _ _ (geq.refl _) := []
+
+#eval find_inv_mul (geq.mul_inv (X 0))
+
+#exit
+
+import data.fin
+universes u v
+/-- A value which wraps a type. -/
+inductive typeinfo (α : Type u) : Type
+| of [] : typeinfo
+
+/-- Get the type of the domain of a function type. -/
+abbreviation  typeinfo.domain {α : Type u} {β : α → Type v}
+  (a : typeinfo (Π (i : α), β i)) : Type u := α
+
+/-- Get the type of the codomain of a function type. -/
+abbreviation typeinfo.codomain {α : Type v} {β : Type u}
+  (a : typeinfo (α → β)) : Type u := β
+
+/-- Get the type of the codomain of a dependent function type. -/
+abbreviation typeinfo.pi_codomain {α : Type v} {β : α → Type u}
+  (a : typeinfo (Π (i : α), β i)) : α → Type u := β
+
+variables {M' : Type u}  {ι : Type v}
+
+#check (ι → M')
+#check typeinfo (ι → M')
+#check typeinfo.of (ι → M')
+#check typeinfo.domain (typeinfo.of (ι → M'))
+
+#check (fin 2 → M')
+#check typeinfo (fin 2 → M')
+#check typeinfo.of (fin 2 → M')
+#check typeinfo.domain (typeinfo.of (fin 2 → M') : _)  -- fail, everything else works
+
+
+#exit
+
+import data.zmod.basic
+import data.list
+
+#eval quot.unquot ((finset.univ : finset (fin 4 × fin 4 × fin 4)).filter
+  (λ q : fin 4 × fin 4 × fin 4,
+    let a := 2 * q.1.val + 1,
+        b := 2 * q.2.1.val + 1,
+        c := 2 * q.2.2.val in
+    ¬ (8 ∣ a + b) ∧
+    ¬ (8 ∣ a + b + c) ∧
+    ∃ x ∈ [1,4,9,16],∃ y ∈ [1,4,9,16], ∃ z ∈ [1,4,9,16],
+     32 ∣ a * x + b * y + c * z)).1
+
+
+example {X Y Z : Type} (f g : X → Y × Z)
+  (h₁ : prod.fst ∘ f = prod.fst ∘ g)
+  (h₂ : prod.snd ∘ f = prod.snd ∘ g) :
+  f = g :=
+calc f = (λ x, ((prod.fst ∘ f) x, (prod.snd ∘ f) x)) : begin
+  dsimp,
+
+end
+... = _
+
+open nat
+
+attribute [elab_as_eliminator] binary_rec
+
+
+
+
+example {a b c : ℕ+} (h' : ({a, b, c} : finset ℕ+).card = 3) :
+  a ≠ b ∧ b ≠ c ∧ c ≠ a :=
+begin
+  sorry
+end
+
+#exit
+import data.nat.basic
+import tactic
+
+def Delta (f : int → int) := λ x, f (x + 1) - f x
+
+example : Delta ∘ Delta ∘ Delta ∘ Delta  = sorry :=
+begin
+  funext,
+  dsimp [function.comp, Delta],
+  abel,
+
+end
+
+#exit
+import data.list
+import algebra.big_operators
+
+#print finset.sum_
+
+def blah_core {α : Type} (f : α → α) : list α → list α → list (list α)
+| l₁ []      := sorry
+| l₁ (a::l₂) := l₁ ++ f a :: l₂
+
+def partitions {α : Type} : list α → list (list (list α))
+| [] := [[]]
+| (a::l) := let P := partitions l in
+  P.bind (λ p, ([a] :: p) :: p.bind (λ l, [p.replace]))
+
+def tree_number : Π n : ℕ, array n ℕ
+| n :=  let s : list (list ℕ) :=
+
+#exit
+import data.list order.pilex
+
+#print list.lex
+
+variables {α : Type*} (r : α → α → Prop) (wf : well_founded r)
+
+def to_pilex : list α → Σ' n : ℕ, fin n → α
+| []     := ⟨0, fin.elim0⟩
+| (a::l) := ⟨(to_pilex l).fst.succ, fin.cons a (to_pilex l).snd⟩
+
+lemma list.lex_wf : well_founded (list.lex r) :=
+subrelation.wf
+  _
+  (inv_image.wf to_pilex (psigma.lex_wf nat.lt_wf (λ n, pi.lex_wf)))
+
+#exit
+
+#exit
+import data.zmod.basic
+
+lemma lemma1 (n : ℕ) {G : Type*} [group G] (a b : G) (h : a * b = b * a) :
+  a^n * b = b * a^n :=
+begin
+  induction n with n ih,
+  { rw [pow_zero, one_mul, mul_one] },
+  { rw [pow_succ, mul_assoc, ih, ← mul_assoc, h, mul_assoc] }
+end
+
+example {G : Type*} [group G] (a b : G) (h : a * b = b * a) : a^2 * b = b * a^2 :=
+lemma1 2 a b h
+
+
+def compute_mod (p : nat.primes) (r : ℤ) : ∀ m : nat, zmod (p ^ m)
+| 0 := 1
+| 1 := by convert fintype.choose (λ x : zmod p, x^2 = r) sorry; simp
+| (n + )
+
+
+
+#eval (4⁻¹ : zmod 169)
+#eval (-3 + 4 * 13 : int)
+#eval (55 ^ 2 : zmod 169)
+#eval (127^2 + 4) / 169
+#eval (-4 * 95⁻¹ : zmod(13^ 3))
+#eval ((95 + 13^2 * 740)^2 : zmod (13^3)) + 4
+#eval 13^3
+
+instance : fact (0 < (5 ^ 3)) := sorry
+
+#eval ((finset.univ : finset (zmod (5 ^ 3)))).filter (λ x, x^2 = (-10 : zmod _))
+
+
+#eval padic_norm 5 (1 / 4 + 156)
+
+open native
+
+
+meta def x : ℕ → rb_set ℕ × rb_set ℕ
+| 0     := (mk_rb_map, mk_rb_map)
+| (n+1) := let r := x n in
+  let h := r.1.insert (n + 1) in
+  let i := r.1.insert n in
+  if n % 2 = 0
+  then (h, r.2.insert n)
+  else (i, r.2.insert n)
+
+
+meta def y : ℕ → rb_set ℕ
+| 0     := mk_rb_map
+| (n+1) := (y n).insert n
+
+set_option profiler true
+
+#eval (x 100000).1.contains 0
+#eval (y 200000).contains 0
+
+#exit
+@[reducible] def V := {s : finset (fin 5) // s.card = 3}
+
+open sum
+
+def edge : V → V → bool
+| (inl x) (inl y) := x = y + 1 ∨ y = x + 1
+| (inr x) (inr y) := x = y + 2 ∨ y = x + 2
+| (inl x) (inr y) := x = y
+| (inr x) (inl y) := x = y
+
+@[derive decidable_pred] def is_isom (f : V ≃ V) : Prop :=
+∀ x y, edge x y = edge (f x) (f y)
+
+-- #eval fintype.card (V ≃ V)
+-- #eval fintype.card {f : V ≃ V // is_isom f}
+
+#exit
+import all
+
+open tactic
+def foo : nat → Prop
+| 0 := true
+| (n+1) := (foo n) ∧ (foo n)
+
+meta def mk_foo_expr : nat → expr
+| 0 := `(trivial)
+| (n+1) :=
+  expr.app
+    (expr.app
+      (reflected.to_expr `(@and.intro (foo n) (foo n)))
+      (mk_foo_expr n))
+    (mk_foo_expr n)
+
+open tactic
+
+meta def show_foo : tactic unit :=
+do `(foo %%nx) ← target,
+   n ← eval_expr nat nx,
+   exact (mk_foo_expr n)
+
+set_option profiler true
+
+lemma foo_200 : foo 200 :=
+by show_foo
+
+#print foo_200
+
+run_cmd do env ← get_env,
+  dec ← env.get `foo_200,
+  trace (dec.value.fold 0 (fun _ _ n, n + 1) : nat)
+
+lemma X : true :=
+by cc
+#print level
+run_cmd do env ← get_env,
+  l ← env.fold (return ([] : list name))
+    (λ dec l, do l' ← l,
+      let b : bool := expr.occurs
+        `((17 : ℕ))
+        dec.type,
+        return (cond b (dec.to_name :: l') l')),
+  trace l.length
+
+#print X
+
+def X : list ℕ → list (ℕ × ℕ)
+| []     := []
+| (a::l) := X l ++ l.map (prod.mk a)
+
+#eval X [1, 2, 3, 4, 5]
+
+open tactic
+
+#print tactic.set_goals
+
+run_cmd trace_state
+#print unify
+
+#exit
+
+
+import algebra.ring
+
+universe u
+
+variables (X : Type*) [ring X]
+
+-- a contrived example to test recursive and non-recursive constructors
+inductive foo : X → X → Prop
+| of_mul {a} : foo a (a*a)
+| add_two {a b} : foo a b → foo a (b + 2)
+
+inductive foo_eqv : X → X → Prop
+| refl (a) : foo_eqv a a
+| symm {a b} : foo_eqv a b → foo_eqv b a
+| trans {a b c} : foo_eqv a b → foo_eqv b c → foo_eqv a c
+| of_mul {a} : foo_eqv a (a*a)
+| add_two {a b} : foo_eqv a b → foo_eqv a (b + 2)
+
+variable {α : Type u}
+variable (r : α → α → Prop)
+
+inductive eqv_gen' : α → α → Type u
+| rel : Π x y, r x y → eqv_gen' x y
+| refl : Π x, eqv_gen' x x
+| symm : Π x y, eqv_gen' x y → eqv_gen' y x
+| trans : Π x y z, eqv_gen' x y → eqv_gen' y z → eqv_gen' x z
+
+def foo_eqv.of_eqv_gen : ∀ {x y}, eqv_gen' (foo X) x y → foo_eqv X x y
+| _ _ (eqv_gen'.refl _) := foo_eqv.refl _
+| _ _ (eqv_gen'.symm _ _ h) := (foo_eqv.of_eqv_gen h).symm
+| _ _ (eqv_gen'.trans a b c hab hbc) := (foo_eqv.of_eqv_gen hab).trans (foo_eqv.of_eqv_gen hbc)
+| _ _ (eqv_gen'.rel a b (foo.of_mul)) := foo_eqv.of_mul
+| _ _ (eqv_gen'.rel a b (foo.add_two h)) := foo_eqv.add_two (foo_eqv.of_eqv_gen $ eqv_gen'.rel _ _ h)
+using_well_founded
+{ rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ p, sizeof p.snd.snd)⟩],
+  dec_tac := `[simp [measure, inv_image]; apply nat.lt_succ_self _] }
+
+#exit
+import tactic.abel
+
+variables {A : Type*} [ring A]
+
+attribute [reducible] id
+
+#eval expr.lex_lt `(id id (1 : nat)) `((2 : nat))
+
+#check `(add_comm_group.to_add_comm_monoid ℤ)
+
+meta def x : expr := `(add_comm_group.to_add_comm_monoid ℤ)
+meta def y : expr := `(show add_comm_monoid ℤ, from infer_instance)
+#eval (x = y : bool)
+
+def f {A : Type} [add_comm_monoid A] : A → A := id
+
+example (a b c : ℤ) :
+  @f ℤ (by tactic.exact y) a + b = b + @f ℤ (by tactic.exact x) a :=
+begin
+  abel,
+end
+
+
+#exit
+open complex
+open_locale real
+
+example : (1 : ℂ) ^ (- I * log 2 / (2 * π)) = 2 :=
+begin
+  rw one_cpow,
+
+end
+
+#exit
+import tactic data.nat.basic
+import data.nat.prime
+import data.fintype
+
+open tactic
+
+#print list.take
+
+
+
+meta def test : tactic unit :=
+do t ← target,
+(lhs, rhs) ← expr.is_eq t,
+s ← mk_simp_set tt [] [simp_arg_type.expr ``(mul_one)],
+(e₁, e₂) ← tactic.simplify s.1 [] lhs,
+tactic.exact e₂
+
+run_cmd do n ← mk_fresh_name, trace n
+
+-- example : 2021 = 5 + nat.choose (4 ^ 3) (nat.choose 2 1) :=
+-- begin
+--   rw [nat.choose_eq_factorial_div_factorial, nat.choose_eq_factorial_div_factorial];
+--   norm_num,
+-- end
+
+#exit
+import order.order_iso_nat
+import order.preorder_hom
+
+namespace partial_order
+
+variables (α : Type*)
+
+/-- For partial orders, one of the many equivalent forms of well-foundedness is the following
+flavour of "ascending chain condition". -/
+class satisfies_acc [preorder α] : Prop :=
+(acc : ∀ (a : ℕ →ₘ α), ∃ n, ∀ m, n ≤ m → a n = a m)
+
+run_cmd tactic.mk_iff_of_inductive_prop ``satisfies_acc `partial_order.satisfies_acc_iff
+
+variables [partial_order α]
+
+lemma wf_iff_satisfies_acc :
+  well_founded ((>) : α → α → Prop) ↔ satisfies_acc α :=
+begin
+  rw [rel_embedding.well_founded_iff_no_descending_seq,
+    satisfies_acc_iff, not_nonempty_iff_imp_false],
+
+end
+
+#print native.float
+
+
+
+#eval native.float.exp native.float.pi - 23.1407 + 3.8147 * 0.000001
+#eval native.float.exp 1
+
+def thing (a b : nat) : nat :=
+(a + b).choose a
+
+#exit
+import analysis.special_functions.trigonometric
+
+universes u v
+
+#check (Type u -> Type v : Type (max u v + 1)
+open real
+
+noncomputable theory
+
+#print real.arcsin
+
+lemma cosh_def (x : ℝ) : cosh x = (exp x + exp (-x)) / 2 :=
+by simp only [cosh, complex.cosh, complex.div_re, complex.exp_of_real_re, complex.one_re,
+  bit0_zero, add_zero, complex.add_re, euclidean_domain.zero_div, complex.bit0_re,
+  complex.one_im, complex.bit0_im, mul_zero, ← complex.of_real_neg, complex.norm_sq];
+  ring
+
+lemma sinh_def (x : ℝ) : sinh x = (exp x - exp (-x)) / 2 :=
+by simp only [sinh, complex.sinh, complex.div_re, complex.exp_of_real_re, complex.one_re,
+  bit0_zero, add_zero, complex.sub_re, euclidean_domain.zero_div, complex.bit0_re,
+  complex.one_im, complex.bit0_im, mul_zero, ← complex.of_real_neg, complex.norm_sq];
+  ring
+
+lemma cosh_pos (x : ℝ) : 0 < real.cosh x :=
+(cosh_def x).symm ▸ half_pos (add_pos (exp_pos x) (exp_pos (-x)))
+
+lemma sinh_strict_mono : strict_mono sinh :=
+strict_mono_of_deriv_pos differentiable_sinh (by rw [real.deriv_sinh]; exact cosh_pos)
+
+lemma sinh_arcsinh (x : ℝ) : sinh (arcsinh x) = x :=
+have h₂ : 0 ≤ x^2 + 1, from add_nonneg (pow_two_nonneg _) zero_le_one,
+have h₁ : 0 < x + sqrt (x^2 + 1),
+  from suffices - x < sqrt (x^2 + 1), by linarith,
+    lt_of_pow_lt_pow 2 (sqrt_nonneg _)
+      begin
+        rw [sqr_sqrt h₂, pow_two, pow_two, neg_mul_neg],
+        exact lt_add_one _
+      end,
+begin
+  rw [sinh_def, arcsinh, exp_neg, exp_log h₁],
+  field_simp [ne_of_gt h₁],
+  rw [add_mul, mul_add, mul_add, ← pow_two (sqrt _), sqr_sqrt h₂],
+  gen''eralize hy : sqrt (x^2 + 1) = y,
+  rw [← sub_eq_zero],
+  ring
+end
+
+lemma arcsinh_sinh (x : ℝ) : arcsinh (sinh x) = x :=
+function.right_inverse_of_injective_of_left_inverse
+  sinh_strict_mono.injective sinh_arcsinh _
+
+
+#exit
+import group_theory.sylow
+
+open_locale classical
+/-
+theorem has_fixed_point {G : Type} [group G] [fintype G] (hG65 : fintype.card G = 65)
+  {M : Type} [fintype M] (hM27 : fintype.card M = 27) [mul_action G M] :
+  ∃ m : M, ∀ g : G, g • m = m :=
+have horbit : ∀
+-- begin
+--   rcases @incidence.I₃ _ _ incident_with _ with ⟨A, B, C, hAB, hBC, hAC, hABC⟩,
+
+--   have : P ≠ B ∧ P ≠ C ∨ P ≠ A ∧ P ≠ C ∨ P ≠ A ∧ P ≠ B, { finish },
+--   wlog hP : P ≠ B ∧ P ≠ C := this using [B C, A C, A B],
+--   {  }
+
+-- end
+
+
+end
+
+#exit
+
+theorem fib_fast_correct : ∀ n, fib_fast n = fib n :=
+
+#exit
+import data.equiv.denumerable
+open function
+
+structure iso (A : Type) (B : Type) :=
+  (a_to_b : A → B)
+  (b_to_a : B → A)
+  (a_b_a : ∀ a, b_to_a (a_to_b a) = a)
+  (b_a_b : ∀ b, a_to_b (b_to_a b) = b)
+
+inductive nat_plus_1 : Type
+| null : nat_plus_1
+| is_nat (n : ℕ) : nat_plus_1
+
+inductive nat_plus_nat : Type
+| left (n : ℕ) : nat_plus_nat
+| right (n : ℕ) : nat_plus_nat
+
+
+-- Task 0
+-- Find a bijection between bool and bit. (provided for you as an example)
+
+
+inductive bit : Type
+  | b0 : bit
+  | b1 : bit
+
+open bit
+
+def bool_to_bit : bool → bit
+| tt := b1
+| ff := b0
+
+def bit_to_bool : bit → bool
+| b0 := ff
+| b1 := tt
+
+def bool_iso_bit : iso bool bit :=
+{
+  a_to_b := bool_to_bit,
+  b_to_a := bit_to_bool,
+  a_b_a := λ a, bool.cases_on a rfl rfl,
+  b_a_b := λ b, bit.cases_on b rfl rfl,
+}
+
+-- Task 1
+-- General properties of iso
+
+-- Task 1-1 : Prove that any set has the same cardinality as itself
+def iso_rfl {A : Type} : iso A A := ⟨id, id, eq.refl, eq.refl⟩
+
+-- Task 1-2 : Prove that iso is symmetric
+def iso_symm {A B : Type} (i : iso A B) : iso B A :=
+⟨i.2, i.1, i.4, i.3⟩
+
+-- Task 1-3 : Prove that iso is transitive
+def iso_trans {A B C : Type} (ab : iso A B) (bc : iso B C) : iso A C :=
+⟨bc.1 ∘ ab.1, ab.2 ∘ bc.2, λ _, by simp [function.comp, bc.3, ab.3],
+  by simp [function.comp, bc.4, ab.4]⟩
+
+-- Task 1-4 : Prove the following statement:
+-- Given two functions A->B and B->A, if A->B->A is satisfied and B->A is injective, A <=> B
+def bijection_alt {A B : Type} (ab : A → B) (ba : B → A)
+  (h : ∀ a, ba (ab a) = a) (hba: injective ba) : iso A B :=
+⟨ab, ba, h, λ b, hba $ by rw h⟩
+
+-- Task 2
+-- iso relations between nat and various supersets of nat
+
+-- nat_plus_1 : a set having one more element than nat. (provided in preloaded)
+
+
+
+
+open nat_plus_1
+
+def nat_iso_nat_plus_1 : iso ℕ nat_plus_1 :=
+⟨fun n, nat.cases_on n null is_nat,
+  fun n, nat_plus_1.cases_on n 0 nat.succ,
+  λ n, by cases n; refl,
+  fun n, by cases n; refl⟩
+
+-- nat_plus_nat : a set having size(nat) more elements than nat. (provided in preloaded)
+
+
+open nat_plus_nat
+
+instance : denumerable nat_plus_nat :=
+denumerable.of_equiv (ℕ ⊕ ℕ)
+  ⟨λ n, nat_plus_nat.cases_on n sum.inl sum.inr,
+   fun n, sum.cases_on n left right,
+   fun n, by cases n; refl,
+   fun n, by cases n; refl⟩
+
+def nat_iso_nat_plus_nat : iso ℕ nat_plus_nat :=
+let e := denumerable.equiv₂ ℕ nat_plus_nat in
+⟨e.1, e.2, e.3, e.4⟩
+
+
+#exit
+import data.finset
+
+open finset
+
+variable {α : Type*}
+
+lemma list.take_sublist : ∀ (n : ℕ) (l : list α), l.take n <+ l
+| 0     l      := list.nil_sublist _
+| (n+1) []     := list.nil_sublist _
+| (n+1) (a::l) := list.cons_sublist_cons _ (list.take_sublist _ _)
+
+lemma list.take_subset (n : ℕ) (l : list α) : l.take n ⊆ l :=
+list.subset_of_sublist (list.take_sublist _ _)
+
+#print list.mem_diff_iff_of_nop
+
+lemma exists_intermediate_set {A B : finset α} (i : ℕ)
+  (h₁ : i + card B ≤ card A) (h₂ : B ⊆ A) :
+  ∃ (C : finset α), B ⊆ C ∧ C ⊆ A ∧ card C = i + card B :=
+begin
+  cases A with A hA, cases B with B hB,
+  induction A using quotient.induction_on with A,
+  induction B using quotient.induction_on with B,
+  classical,
+  refine ⟨⟨⟦((B.diff A).take i) ++ A⟧,
+    list.nodup_append.2 ⟨list.nodup_of_sublist (list.take_sublist _ _)
+      (list.nodup_diff hB), hA, list.disjoint_left.2 (λ a ha h, _)⟩⟩, _⟩,
+  have := list.take_subset _ _ ha,  finish [list.mem_diff_iff_of_nodup hB],
+  dsimp, simp [finset.subset_iff],
+
+
+
+end
+
+
+#exit
+import data.rat.order data.equiv.denumerable data.rat.denumerable
+
+structure rat_iso_rat_without_zero : Type :=
+(to_fun : ℚ → ℚ)
+(map_ne_zero : ∀ x, to_fun x ≠ 0)
+(exists_map_of_ne_zero : ∀ y ≠ 0, ∃ x, to_fun x = y)
+(injective : ∀ x y, to_fun x = to_fun y → x = y)
+(map_le_map : ∀ x y, x ≤ y → to_fun x ≤ to_fun y)
+
+def denumerable_rat : ℕ → ℕ × list ℚ
+| 0     := ⟨1, [0]⟩
+| (n+1) :=
+let ⟨i, l⟩ := denumerable_rat n in
+have h : ∃ m : ℕ, let p := denumerable.equiv₂ ℕ (ℤ × ℕ+) (m + i) in
+    nat.coprime p.1.nat_abs p.2,
+      from sorry,
+let m := nat.find h in
+let p := denumerable.equiv₂ ℕ (ℤ × ℕ+) (m + i) in
+⟨m + i + 1, ⟨p.1, p.2, p.2.2, nat.find_spec h⟩ :: l⟩
+
+def denumerable_rat' : ℕ → list ℚ
+| 0     := []
+| (n+1) :=
+let p := denumerable.equiv₂ ℕ (ℤ × ℕ+) n in
+if h : p.1.nat_abs.coprime p.2.1
+then ⟨p.1, p.2.1, p.2.2, h⟩ :: denumerable_rat' n
+else denumerable_rat' n
+
+#eval denumerable_rat' 10000
+
+def blah : ℕ → list {x : ℚ // x ≠ 0} × list {x : ℚ // x ≠ 0}
+| 0 := ⟨[], [⟨-1, dec_trivial⟩]⟩
+| (n+1) :=
+let ⟨i, lq, ln, lq0⟩ := blah n in
+have h : ∃ m : ℕ, let p := denumerable.equiv₂ ℕ (ℤ × ℕ+) (m + i) in
+    nat.coprime p.1.nat_abs p.2,
+      from sorry,
+let m := nat.find h in
+let p := denumerable.equiv₂ ℕ (ℤ × ℕ+) (m + i) in
+⟨m + i + 1, ⟨p.1, p.2, p.2.2, nat.find_spec h⟩ :: lq,
+  _, _⟩
+
+
+-- set_option profiler true
+
+-- #eval ((denumerable_rat 100)).2
+-- #eval (((list.range 100).map (denumerable.equiv₂ ℕ ℚ))).reverse
+
+-- -- instance denumerable_rat_without_zero :
+-- --   denumerable {x : ℚ // x ≠ 0} :=
+
+
+-- #eval denumerable.equiv₂ ℚ ℕ 0
+
+-- def inbetween (a b : {x : ℚ // x ≠ 0}) : {x : ℚ // x ≠ 0} :=
+-- if h : (a : ℚ) + b = 0
+-- then ⟨((2 : ℚ) * a + b)/ 3,
+--   div_ne_zero (by rw [two_mul, add_assoc, h, add_zero]; exact a.2) (by norm_num)⟩
+-- else ⟨(a + b) / 2, div_ne_zero h (by norm_num)⟩
+
+-- attribute [priority 10000] denumerable_rat_without_zero
+
+-- def rat_iso_rat_without_zero_aux : ℕ → list {x : ℚ // x ≠ 0}
+-- | 0     := [denumerable.equiv₂ ℕ {x : ℚ // x ≠ 0} 0]
+-- | (n+1) :=
+-- let q := denumerable.equiv₂ ℕ ℚ (n+1) in
+-- let l := rat_iso_rat_without_zero_aux n in
+-- option.cases_on (l.filter (λ x : {x : ℚ // x ≠ 0}, x.1 ≤ q)).maximum
+--   (option.cases_on (l.filter (λ x : {x : ℚ // x ≠ 0}, q ≤ x.1)).minimum
+--     [] (λ x, _))
+--   _
+
+
+
+theorem nonempty_rat_iso_rat_without_zero :
+  nonempty rat_iso_rat_without_zero :=
+
+
+open nat
+
+def fsum : (ℕ → ℕ) → ℕ → ℕ :=
+  λ f n, nat.rec_on n (f 0) (λ n' ihn', f (nat.succ n') + ihn')
+
+open nat
+
+theorem fsum_zero (f) : fsum f 0 = f 0 := rfl
+theorem fsum_succ (n f) : fsum f (succ n) = f (succ n) + fsum f n := rfl
+
+def sq : ℕ → ℕ := λ n, n ^ 2
+def cb : ℕ → ℕ := λ n, n ^ 3
+
+lemma fsum_id_eq (n) : 2 * fsum id n = n * (n + 1) :=
+begin
+  induction n with n ih,
+  { refl },
+  { rw [fsum_succ, mul_add, ih, succ_eq_add_one, id.def],
+    ring }
+end
+
+lemma fsum_cb_eq (n) : 4 * fsum cb n = (n * (n + 1)) * (n * (n + 1)) :=
+begin
+  induction n with n ih,
+  { refl },
+  { rw [fsum_succ, mul_add, ih, succ_eq_add_one, cb],
+    simp [mul_add, add_mul, nat.pow_succ, bit0, bit1, mul_assoc,
+      mul_comm, mul_left_comm, add_comm, add_assoc, add_left_comm] }
+end
+
+theorem nicomachus (n) : sq (fsum id n) = fsum cb n :=
+(nat.mul_left_inj (show 0 < 4, from dec_trivial)).1
+  (calc 4 * sq (fsum id n) = (2 * fsum id n) * (2 * fsum id n) :
+    by simp only [sq, ← nat.pow_eq_pow]; ring
+  ... = (n * (n + 1)) * (n * (n + 1)) : by rw [fsum_id_eq]
+  ... = _ : by rw [fsum_cb_eq])
+
+#exit
+
+lemma pow_sqr_aux_succ (gas b e : ℕ) :
+  pow_sqr_aux (succ gas) b e =
+    prod.cases_on (bodd_div2 e)
+    (λ r e', bool.cases_on r
+      (pow_sqr_aux gas (b * b) e')
+      (b * pow_sqr_aux gas (b * b) e')) := rfl
+
+def pow_sqr (b e : ℕ) : ℕ := pow_sqr_aux e b e
+
+lemma bodd_eq_ff : ∀ n, bodd n = ff ↔ even n
+| 0 := by simp
+| (n+1) := by rw [bodd_succ, even_add, ← bodd_eq_ff]; simp
+
+lemma pow_eq_aux (gas b e : ℕ) (h : e ≤ gas) : pow_sqr_aux gas b e = b ^ e :=
+begin
+  induction gas with gas ih generalizing e b,
+  { rw [nat.eq_zero_of_le_zero h], refl },
+  { rw [pow_sqr_aux_succ],
+    cases e with e,
+    { dsimp [bodd_div2],
+      rw [ih _ _ (nat.zero_le _), nat.pow_zero] },
+    { rw [bodd_div2_eq],
+      have : div2 (succ e) < succ gas,
+        from lt_of_lt_of_le
+          (by rw [div2_val]; exact nat.div_lt_self (nat.succ_pos _) dec_trivial)
+          h,
+      rcases hb : bodd (succ e) with tt | ff,
+      { dsimp,
+        have heven : even (succ e), by rwa bodd_eq_ff at hb,
+        rw [ih _ _ (nat.le_of_lt_succ this), div2_val, ← nat.pow_two,
+          ← nat.pow_mul, nat.mul_div_cancel' heven] },
+      { dsimp,
+        have hodd : succ e % 2 = 1, { rw [← not_even_iff, ← bodd_eq_ff, hb], simp },
+        rw [ih _ _ (nat.le_of_lt_succ this), div2_val, ← nat.pow_two,
+          ← nat.pow_mul, mul_comm, ← nat.pow_succ, nat.succ_eq_add_one,
+          add_comm],
+        suffices : b ^ (succ e % 2 + 2 * (succ e / 2)) = b ^ succ e, rwa hodd at this,
+        rw [nat.mod_add_div] } } }
+end
+
+theorem pow_eq (b e : ℕ) : pow_sqr b e = b ^ e :=
+pow_eq_aux _ _ _ (le_refl _)
+
+#exit
+import data.fintype.basic
+
+open finset
+lemma mul_comm_of_card_eq_four (G : Type u) [fintype G] [group G]
+  (hG4 : fintype.card G = 4) (g h : G) : G, g * h = h * g :=
+example {G : Type*} [fintype G] [group G] (h4 : fintype.card G ≤ 4) :
+  ∀ x y : G, x * y = y * x :=
+λ g h, classical.by_contradiction $ λ H, begin
+  have hn : multiset.nodup [x * y, y * x, x, y, 1],
+  { finish [mul_right_eq_self, mul_left_eq_self, mul_eq_one_iff_eq_inv] },
+  exact absurd (le_trans (card_le_of_subset (subset_univ ⟨_, hn⟩)) hG4) dec_trivial
+end
+
+#exit
+import topology.metric_space.closeds
+open nat
+
+def strong_rec_on_aux {P : ℕ → Sort*}
+  (h : Π n : ℕ, (Π m < n, P m) → P n) :
+  Π n m, m < n → P m :=
+λ n, nat.rec_on n (λ m h₁, absurd h₁ (not_lt_zero _))
+  (λ n ih m h₁, or.by_cases (lt_or_eq_of_le (le_of_lt_succ h₁))
+    (ih _)
+    (λ h₁, by subst m; exact h _ ih))
+
+lemma strong_rec_on_aux_succ {P : ℕ → Sort*}
+  (h : Π n : ℕ, (Π m < n, P m) → P n) (n m h₁):
+strong_rec_on_aux h (succ n) m h₁ =
+  or.by_cases (lt_or_eq_of_le (le_of_lt_succ h₁))
+    (λ hmn, strong_rec_on_aux h _ _ hmn)
+    (λ h₁, by subst m; exact h _ (strong_rec_on_aux h _)) := rfl
+
+theorem nat.strong_rec_on_beta_aux {P : ℕ → Sort*} {h} {n : ℕ} :
+  (nat.strong_rec_on n h : P n) =
+  (strong_rec_on_aux h (succ n) n (lt_succ_self _)) := rfl
+
+theorem nat.strong_rec_on_beta {P : ℕ → Sort*} {h} {n : ℕ} :
+  (nat.strong_rec_on n h : P n) =
+    h n (λ m hmn, (nat.strong_rec_on m h : P m)) :=
+begin
+  simp only [nat.strong_rec_on_beta_aux,
+    strong_rec_on_aux_succ, or.by_cases, dif_pos, not_lt, dif_neg],
+  congr, funext m h₁,
+  induction n with n ih,
+  { exact (not_lt_zero _ h₁).elim },
+  { cases (lt_or_eq_of_le (le_of_lt_succ h₁)) with hmn hmn,
+    { simp [← ih hmn, strong_rec_on_aux_succ, or.by_cases, hmn] },
+    { subst m, simp [strong_rec_on_aux_succ, or.by_cases] } }
+end
+
+def strong_rec' {P : ℕ → Sort*} (h : ∀ n, (∀ m, m < n → P m) → P n) : ∀ (n : ℕ), P n
+| n := h n (λ m hm, strong_rec' m)
+
+set_option profiler true
+
+#reduce strong_rec'
+  (λ n, show (∀ m, m < n → ℕ) → ℕ, from nat.cases_on n 0 (λ n h, h 0 (succ_pos _)))
+  500
+
+#reduce nat.strong_rec_on
+  500
+  (λ n, show (∀ m, m < n → ℕ) → ℕ, from nat.cases_on n 0 (λ n h, h 0 (succ_pos _)))
+
+#eval strong_rec'
+  (λ n, show (∀ m, m < n → ℕ) → ℕ, from nat.cases_on n 0 (λ n h, h 0 (succ_pos _)))
+  10000000
+
+#eval nat.strong_rec_on
+  10000000
+  (λ n, show (∀ m, m < n → ℕ) → ℕ, from nat.cases_on n 0 (λ n h, h 0 (succ_pos _)))
+#exit
+constant layout : Type → Type
+--constant edge_sequence : Type → Type
+
+--inductive T : Π {b : bool}, cond b (layout G) (Σ L : layout G, )
+
+mutual inductive edge_sequence, add_edge_sequence
+with edge_sequence : layout G → Type
+| single {L : layout G} {e : G.edges} (h : e ∈ L.remaining_edges) : edge_sequence L
+| cons {L : layout G} (S : edge_sequence L) {e : G.edges}
+  (h : e ∈ (add_edge_sequence S).1.remaining_edges) : edge_sequence L
+with add_edge_sequence : Π {L : layout G}, edge_sequence L → layout G × finset G.boxes
+| L (single h) := L.add_edge h
+| L (cons S h) := let ⟨L', B⟩ := L.add_edge_sequence S in let ⟨L'', B'⟩ := L.1.add_edge h in ⟨L'', B ∪ B'⟩
+
+
+
+import topology.basic topology.metric_space.closeds
+#print closeds
+lemma closure_inter_subset_inter_closure' {X Y : set ℝ} :
+  closure (X ∩ Y) ⊆ closure X ∩ closure Y :=
+galois_connection.u_inf
+  begin show galois_connection (closure : set ℝ → closeds ℝ) (subtype.val),  end
+
+#exit
+import data.fintype.basic
+open finset
+
+set_option class.instance_max_depth 1000
+
+#eval (((univ : finset (vector (fin 10) 3)).filter
+  (λ v : vector (fin 10) 3, (v.nth 0 = 6 ∨ v.nth 1 = 8 ∨ v.nth 2 = 2)
+    ∧ (7 : fin 10) ∉ v.1 ∧ (3 : fin 10) ∉ v.1 ∧ (8 : fin 10) ∉ v.1
+    ∧ ((v.nth 1 = 6 ∨ v.nth 2 = 6) ∨ (v.nth 0 = 1 ∨ v.nth 2 = 1) ∨
+      (v.nth 0 = 4 ∨ v.nth 1 = 4))
+    ∧ ((v.nth 1 = 7 ∨ v.nth 2 = 7) ∨ (v.nth 0 = 8 ∨ v.nth 2 = 8) ∨
+      (v.nth 0 = 0 ∨ v.nth 1 = 0))
+    )).map
+  ⟨vector.to_list, subtype.val_injective⟩)
+
+universes u v
+
+def map_copy_aux {α : Type u} {β : Type v} {n m : ℕ} (f : α → β) :
+  ℕ → array n α → array m β → array m β
+| r x y := if h : r < n ∧ r < m then
+             let fn : fin n := ⟨r, and.elim_left h⟩ in
+             let fm : fin m := ⟨r, and.elim_right h⟩ in
+             have wf : m - (r + 1) < m - r,
+               from nat.lt_of_succ_le $ by rw [← nat.succ_sub h.2, nat.succ_sub_succ],
+             map_copy_aux (r + 1) x $ y.write fm (f $ x.read fn)
+           else y
+using_well_founded {rel_tac := λ _ _, `[exact ⟨_, measure_wf (λ a, m - a.1)⟩]}
+
+#exit
+import data.zmod.basic
+
+#eval fintype.choose _
+  (show ∃! f : zmod 4 → zmod 4, ∀ x y, f (x * y) = f x * f y
+    ∧ ∀ x, f x = 1 ↔ x = 1 ∧ f ≠ id, from sorry) 3
+
+
+example (n : ℕ) (hn : n ≤ 4) : false :=
+begin
+  classical,
+  interval_cases n,
+  repeat {sorry}
+end
+
+theorem zagier (R : Type) [comm_ring R]
+  [fintype (units R)] : card (units R) ≠ 5 :=
+if h : (-1 : R) = 1
+then _
+else _
+
+
+#exit
+import data.finset
+#print no_zero_divisors
+open nat
+lemma mul_add (t a b : nat) : t * (a + b) = t * a + t * b :=
+
+begin
+
+  induction b with B hB,
+
+  -- b base case
+  rw add_zero a,
+  rw mul_zero t,
+  rw add_zero (t*a),
+  refl,
+
+  -- joint inductive step
+  rw add_succ a B,
+  rw mul_succ t (a + B),
+  rw hB,
+  rw add_assoc (t*a) (t*B) t,
+  rw <- mul_succ t B,
+
+end
+
+#exit
+import data.finset
+import tactic
+
+/-!
+Test
+-/
+#print auto.split_hyps
+open_locale classical
+namespace tactic.interactive
+
+meta def split_hyps := auto.split_hyps
+
+end tactic.interactive
+
+
+
+lemma Z (X : Type*) (a b c d e f : X) (h : ({a,b,c} : set X) = {d,e,f}) :
+  a = d ∧ b = e ∧ c = f ∨ a = d ∧ b = f ∧ c = e ∨ a = e ∧ b = d ∧ c = f
+  ∨ a = e ∧ b = f ∧ c = d ∨ a = f ∧ b = d ∧ c = e ∨ a = f ∧ b = e ∧ c = d :=
+begin sorry
+  -- simp [set.ext_iff] at h,
+  -- have := h a, have := h b, have := h c, have := h d, have := h e, have := h f,
+  -- by_cases a = d; by_cases a = e; by_cases a = f;
+  -- by_cases b = d; by_cases b = e; by_cases b = f;
+  -- by_cases c = d; by_cases c = e; by_cases c = f;
+  -- simp [*, eq_comm] at *; simp * at *; simp * at *,
+  -- finish using [h a, h b, h c, h d, h e, h f]
+
+
+end
+
+example : false :=
+begin
+  have := Z ℕ 0 1 1 0 0 1,
+  simpa using this,
+
+end
+
+example (X : Type*) (a b c d : X) :
+  (a = c ∧ b = d) ∨ (a = d ∧ b = c) ↔
+  ∀ x : X, (x = a ∨ x = b) ↔ (x = c ∨ x = d) :=
+⟨λ h x, by rcases h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩; simp [or_comm],
+  λ h, begin
+    have := h a, have := h b, have := h c, have := h d,
+    by_cases a = c; by_cases a = d;
+    simp [*, eq_comm] at *; simp * at *; simp * at *
+  end⟩
+#exit
+import data.finset
+
+lemma X (X : Type) [decidable_eq X] (x y : X) : ({x, y} : finset X) = {y, x} :=
+begin
+  simp [finset.ext, or_comm]
+
+end
+
+lemma Y (X : Type) [decidable_eq X] (x y : X) : ({x, y} : finset X) = {y, x} :=
+begin
+  finish [finset.ext],
+
+end
+
+#print X
+#print Y
+
+#exit
+
+import all
+
+
+def fact (n : ℕ) : ℕ :=
+let f : ℕ → ℕ := λ n, nat.rec_on n 1 (λ n fact, (n + 1) * fact) in
+f n
+
+def fact' (n : ℕ) : ℕ :=
+let f : ℕ → ℕ := λ n, well_founded.fix nat.lt_wf
+  (λ n fact, show ℕ, from nat.cases_on n (λ _, 1)
+    (λ n fact, (n + 1) * fact n n.lt_succ_self) fact)
+  n in
+f n
+
+#eval fact' 5
+
+#exit
+import data.fintype.basic algebra.big_operators
+
+open finset
+
+open_locale classical
+
+lemma prod_add {α R : Type*} [comm_semiring R] (f g : α → R) (s : finset α) :
+  s.prod (λ a, f a + g a) =
+  s.powerset.sum (λ t : finset α, t.prod f * (s.filter (∉ t)).prod g) :=
+calc s.prod (λ a, f a + g a)
+    = s.prod (λ a, ({false, true} : finset Prop).sum
+      (λ p : Prop, if p then f a else g a)) : by simp
+... = (s.pi (λ _, {false, true})).sum (λ p : Π a ∈ s, Prop,
+      s.attach.prod (λ a : {a // a ∈ s}, if p a.1 a.2 then f a.1 else g a.1)) : prod_sum
+... = s.powerset.sum (λ (t : finset α), t.prod f * (s.filter (∉ t)).prod g) : begin
+  refine eq.symm (sum_bij (λ t _ a _, a ∈ t) _ _ _ _),
+  { simp [subset_iff]; tauto },
+  { intros t ht,
+    erw [prod_ite (λ a : {a // a ∈ s}, f a.1) (λ a : {a // a ∈ s}, g a.1) (λ x, x)],
+    refine congr_arg2 _
+      (prod_bij (λ (a : α) (ha : a ∈ t), ⟨a, mem_powerset.1 ht ha⟩)
+         _ _ _
+        (λ b hb, ⟨b, by cases b; finish⟩))
+      (prod_bij (λ (a : α) (ha : a ∈ s.filter (∉ t)), ⟨a, by simp * at *⟩)
+        _ _ _
+        (λ b hb, ⟨b, by cases b; finish⟩));
+    intros; simp * at *; simp * at * },
+  { finish [function.funext_iff, finset.ext, subset_iff] },
+  { assume f hf,
+    exact ⟨s.filter (λ a : α, ∃ h : a ∈ s, f a h),
+      by simp, by funext; intros; simp *⟩ }
+end
+
+lemma card_sub_card {α : Type*} {s t : finset α} (hst : t ⊆ s) :
+  card s - card t = (s.filter (∉ t)).card :=
+begin
+  rw [nat.sub_eq_iff_eq_add (card_le_of_subset hst), ← card_disjoint_union],
+  exact congr_arg card (finset.ext.2 $ λ _, by split; finish [subset_iff]),
+  finish [disjoint_left]
+end
+
+lemma sum_pow_mul_eq_add_pow
+  {α R : Type*} [comm_semiring R] (a b : R) (s : finset α) :
+  s.powerset.sum (λ t : finset α, a ^ t.card * b ^ (s.card - t.card)) =
+  (a + b) ^ s.card :=
+begin
+  rw [← prod_const, prod_add],
+  refine finset.sum_congr rfl (λ t ht, _),
+  rw [prod_const, prod_const, card_sub_card (mem_powerset.1 ht)]
+end
+
+
+
+
+#exit
+import topology.metric_space.basic
+
+noncomputable theory
+
+variables {X : Type*} [metric_space X]
+variables {Y : Type*} [metric_space Y]
+#reduce 200 - 10
+/- The metric of any two elements of a metric space is non-negative -/
+theorem metric_nonneg : ∀ x y : X, 0 ≤ dist x y := λ x y,
+begin
+    suffices : 0 ≤ dist y x + dist x y - dist y y,
+        rw [dist_self, dist_comm, sub_zero] at this,
+        linarith,
+    linarith [dist_triangle y x y]
+end
+
+/- The product of two metric spaces is also a metric space -/
+instance : metric_space (X × Y) :=
+{   dist := λ ⟨x₀, y₀⟩ ⟨x₁, y₁⟩, dist x₀ x₁ + dist y₀ y₁,
+    dist_self := λ ⟨x, y⟩, show dist x x + dist y y = 0, by simp,
+    eq_of_dist_eq_zero := -- Why can't I use λ ⟨x₀, y₀⟩ ⟨x₁, y₁⟩ here?
+        λ ⟨x₀, y₀⟩ ⟨x₁, y₁⟩, begin
+            --rintros ⟨x₀, y₀⟩ ⟨x₁, y₁⟩,
+            -- show dist x₀ x₁ + dist y₀ y₁ = 0 → (x₀, y₀) = (x₁, y₁), intro h,
+            -- suffices : dist x₀ x₁ = 0 ∧ dist y₀ y₁ = 0,
+            --     rwa [eq_of_dist_eq_zero this.left, eq_of_dist_eq_zero this.right],
+            -- split,
+            -- all_goals {linarith [metric_nonneg x₀ x₁, metric_nonneg y₀ y₁, h]}
+        end,
+    dist_comm := λ ⟨x₀, y₀⟩ ⟨x₁, y₁⟩,
+        show dist x₀ x₁ + dist y₀ y₁ = dist x₁ x₀ + dist y₁ y₀, by simp [dist_comm],
+    dist_triangle := λ ⟨x₀, y₀⟩ ⟨x₁, y₁⟩ ⟨x₂, y₂⟩,
+        show dist x₀ x₂ + dist y₀ y₂ ≤ dist x₀ x₁ + dist y₀ y₁ + (dist x₁ x₂ + dist y₁ y₂),
+        by linarith
+
+#exit
+def definitely_not_false : bool := tt
+
+attribute [irreducible] definitely_not_false
+
+example (f : bool → bool) (h : f definitely_not_false = ff) : f tt = ff := by rw h
+example (h : definitely_not_false = ff) : tt = ff := by rw h
+
+attribute [semireducible] definitely_not_false
+
+example (f : bool → bool) (h : f definitely_not_false = ff) : f tt = ff := by rw h
+example (h : definitely_not_false = ff) : tt = ff := by rw h
+
+attribute [reducible] definitely_not_false
+
+example (f : bool → bool) (h : f definitely_not_false = ff) : f tt = ff := by rw h -- only one that works
+example (h : definitely_not_false = ff) : tt = ff := by rw h
+
+
+#exit
+import data.fintype
+
+#print classical.dec_eq
+
+#print subtype.decidable_eq
+
+#exit
+import logic.basic
+
+def X : Type := empty → ℕ
+
+lemma hx : X = (empty → X) :=
+calc X = Π i : empty, (λ h : empty, ℕ) i : rfl
+... = Π i : empty, (λ h : empty, X) i :
+  have (λ h : empty, ℕ) = (λ h : empty, X),
+    from funext empty.elim,
+  this ▸ rfl
+
+example : X = ℕ :=
+begin
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+  rw hx,
+
+
+end
+
+
+#exit
+prelude
+
+inductive eq {α : Sort*} (a : α) : α → Sort
+| refl : eq a
+
+infix ` = `:50 := eq
+
+constant nat : Type
+
+constant nat.zero : nat
+
+constant nat.succ : nat → nat
+
+constant cast {α : Sort*} (zero : α) (succ : α → α) : nat → α
+
+constant cast_zero {α : Sort*} (zero : α) (succ : α → α) : cast zero succ nat.zero = zero
+
+constant cast_succ {α : Sort*} (zero : α) (succ : α → α) (n : nat) :
+  cast zero succ (nat.succ n) = succ (cast zero succ n)
+
+constant cast_unique {α : Sort*} (zero : α) (succ : α → α)
+  (f : nat → α) (hzero : f nat.zero = zero)
+  (hsucc : ∀ n, f (nat.succ n) = succ (f n)) :
+  ∀ n, f n = cast zero succ n
+
+lemma nat.rec_on {C : nat → Sort*} (n : nat)
+  (hzero : C nat.zero)
+  (hsucc : Π (a : nat), C a → C (nat.succ a)) :
+  C n :=
+cast _ _ _
+
+#exit
+import category_theory.functor_category
+open category_theory
+open category_theory.category
+universes v₁ v₂ u₁ u₂
+
+
+
+namespace tactic.interactive
+
+meta def poor_mans_rewrite_search : tactic unit :=
+`[    iterate 5
+    { repeat {rw assoc},
+      try {rw nat_trans.naturality},
+      try {simp},
+      repeat {rw ←assoc},
+      try {rw nat_trans.naturality},
+      try {simp}
+    }]
+
+end tactic.interactive
+
+variables {C : Type u₁} [𝒞 : category.{v₁} C] {D : Type u₂} [𝒟 : category.{v₂} D]
+include 𝒞 𝒟
+
+variables (X Y U V: C)
+variables (f : X ⟶ Y) (g : V ⟶ U)(h : Y ⟶ V)
+variables (F G  : C ⥤ D)
+variables (α : F ⟶ G)
+
+/- The diagram coming from g and α
+    F(f)        F(h)       F(g)
+F X ---> F Y  --->  F V   ----> F U
+ |        |           |          |
+ |α(X)    |α(Y)       | α (v)    |  α (U)
+ v        v           v          v
+G X ---> G Y ---->    G(V) ---- G(U)
+    G(f)       G(h)         G(g)
+commutes.
+-/
+
+
+
+example :
+  F.map f ≫  α.app Y ≫ G.map h ≫  G.map g =
+    F.map f ≫ F.map h ≫ α.app V  ≫ G.map g :=
+begin
+  poor_mans_rewrite_search,
+end
+#exit
+import data.equiv.basic
+#
+
+axiom univalence {α β : Sort*} : α ≃ β → α = β
+
+
+
+
+#exit
+--import tactic.suggest
+import data.nat.basic algebra.group_power tactic.ring
+
+lemma X1 (a b : ℤ) : a + (a + (a + b)) = a * 3 + b := by ring
+
+--lemma X2 (a b : ℤ) : (a * (a * (a * (a * b))))
+
+example (a b c x : ℤ) (hx : x^3 = -3) :
+  (a * x^2 + b * x + c)^3 =
+  - 9 * a^2 * b * x^2
+  + 3 * a * c^2 * x^2 +
+  3 * b^2 * c * x^2
+   +
+
+  3 * b * c^2 * x
+  - 9 * a * b^2 * x
+  - 9 * a^2 * c * x
+
+  + 9 * a ^ 3
+  -3 * b^3
+  - 18 * a * b * c
+  + c^3 :=
+begin
+  simp [pow_succ, mul_add, add_mul, mul_assoc, mul_comm,
+    mul_left_comm] at *,
+  simp only [← mul_assoc, ← add_assoc],
+  have : ∀ y, x * (x * (x * y)) = -3 * y, { intro, rw [← hx], ring },
+  simp [hx, this],
+  ring,
+
+end
+
+local attribute [simp] nat.succ_pos'
+
+set_option trace.simplify.rewrite true
+
+
+
+def ack : ℕ → ℕ → ℕ
+| 0     y     := y+1
+| (x+1)  0    := ack x 1
+| (x+1) (y+1) := ack x (ack (x+1) y)
+using_well_founded {rel_tac := λ _ _, `[exact ⟨λ _ _, true, sorry⟩],
+  dec_tac := `[trivial]}
+
+#eval ack 3 5
+
+#exit
+import category_theory.monoidal.types
+
+#reduce terminal Type
+
+#exit
+import data.zmod.basic data.nat.totient group_theory.order_of_element
+local notation `φ` := nat.totient
+
+open fintype finset
+
+instance {n : ℕ+} : fintype (units (zmod n)) :=
+fintype.of_equiv _ zmod.units_equiv_coprime.symm
+
+lemma card_units_eq_totient (n : ℕ+) :
+  card (units (zmod n)) = φ n :=
+calc card (units (zmod n)) = card {x : zmod n // x.1.coprime n} :
+  fintype.card_congr zmod.units_equiv_coprime
+... = φ n : finset.card_congr
+  (λ a _, a.1.1)
+  (λ a, by simp [a.1.2, a.2.symm] {contextual := tt})
+  (λ _ _ h, by simp [subtype.val_injective.eq_iff, (fin.eq_iff_veq _ _).symm])
+  (λ b hb, ⟨⟨⟨b, by finish⟩, nat.coprime.symm (by simp at hb; tauto)⟩, mem_univ _, rfl⟩)
+
+lemma pow_totient {n : ℕ+} (x : units (zmod n)) : x ^ φ n = 1 :=
+by rw [← card_units_eq_totient, pow_card_eq_one]
+
+@[simp] lemma totient_zero : φ 0 = 0 := rfl
+
+def coprime.to_units {n : ℕ+} {p : ℕ} (h : nat.coprime p n) : units (zmod n) :=
+
+
+lemma pow_totient' {n : ℕ+} {p : ℕ} (h : nat.coprime p n) : p ^ φ n ≡ 1 [MOD n] :=
+begin
+  cases n, { simp },
+  { erw [← @zmod.eq_iff_modeq_nat ⟨n.succ, nat.succ_pos _⟩, nat.cast_pow],
+    let x := zmod.units_equiv_coprime.symm.to_fun
+      ⟨(p : zmod ⟨n.succ, nat.succ_pos _⟩), by simpa using h⟩, }
+
+
+
+
+end
+
+
+#exit
+import tactic.ring linear_algebra.basic linear_algebra.dual
+
+variables {R : Type*} [field R]
+open finset
+
+example {R : Type*} [ring R] (x₁ x₂ y₁ y₂ : R) :
+  Σ' z₁ z₂ : R, z₁ ^ 2 + z₂ ^ 2 = (x₁ ^ 2 + x₂ ^ 2) * (y₁ ^ 2 + y₂ ^ 2) :=
+⟨x₁ * y₁ + x₂ * y₂, x₁ * y₂ - x₂ * y₁, begin
+  simp only [mul_add, add_mul, add_comm, add_right_comm, pow_two,
+    sub_eq_add_neg],
+  simp only [(add_assoc _ _ _).symm],
+
+end⟩
+
+example {n : ℕ}
+  (hn : ∀ x₁ x₂ : fin (2 ^ n) → R, ∃ y : fin (2 ^ n) → R,
+    univ.sum (λ i, y i ^2) = univ.sum (λ i, x₁ i ^ 2) * univ.sum (λ i, x₂ i ^ 2)) :
+
+
+
+#exit
+import data.polynomial
+
+open polynomial
+#print is_unit
+example (A B : Type) [comm_ring A] [comm_ring B] (f : A →+* B)
+  (p : polynomial A) (hp : monic p) (hip : irreducible (p.map f)) :
+  irreducible p :=
+classical.by_contradiction $ λ h,
+  begin
+    dsimp [irreducible] at h,
+    push_neg at h,
+    cases h,
+    { sorry },
+    { rcases h with ⟨q, r, hpqr, hq, hr⟩,
+      have := hip.2 (q.map f) (r.map f) (by rw [← map_mul, hpqr]),
+       }
+
+
+
+  end
+
+
+#exit
+inductive eq2 {α : Type} (a : α) : α → Type
+| refl : eq2 a
+
+lemma X {α : Type} (a b : α) (h₁ h₂ : eq2 a b) : eq2 h₁ h₂ :=
+begin
+  cases h₁, cases h₂, exact eq2.refl _,
+
+end
+set_option pp.proofs true
+#print X
+
+inductive X : Type
+| mk : X → X
+
+example : ∀ x : X, false :=
+begin
+  assume x,
+  induction x,
+
+end
+
+instance : fintype X := ⟨∅, λ x, X.rec_on x (λ _, id)⟩
+
+#print X.rec
+
+inductive Embedding (b a:Sort u) : Sort u
+| Embed : forall (j:b -> a), (forall (x y:b), j x = j y -> x = y) -> Embedding
+#print Embedding.rec
+def restrict {a b:Sort u} (r:a -> a -> Prop) (e:Embedding b a) (x y: b) : Prop :=
+  begin
+   destruct e, -- error
+  end
+
+#print Embedding
+
+#exit
+def injective {X : Type} {Y : Type} (f : X → Y) : Prop :=
+  ∀ a b : X, f a = f b → a = b
+
+theorem injective_comp3 {X Y Z : Type} (f : X → Y) (g : Y → Z) :
+  injective f → injective g → injective (g ∘ f) :=
+λ hf hg _ _, (hf _ _ ∘ hg _ _)
+--   dunfold injective,
+--   intros hf hg a b,
+
+
+-- end
+
+#exit
+import data.list data.equiv.basic data.fintype
+noncomputable theory
+open_locale classical
+universe u
+variables (α β : Type u)
+
+open finset list
+
+@[simp] lemma list.nth_le_pmap {l : list α} {p : α → Prop}
+  (f : Π (a : α), p a → β) (h : ∀ a, a ∈ l → p a) (n : ℕ)
+  (hn : n < l.length) :
+  (l.pmap f h).nth_le n (by simpa using hn) = f (l.nth_le n hn)
+  (h _ (nth_le_mem _ _ _)) :=
+by simp [pmap_eq_map_attach]
+
+@[simp] lemma list.nth_le_fin_range {n i : ℕ} (h : i < n) :
+  (fin_range n).nth_le i (by simpa using h) = ⟨i, h⟩ :=
+by simp only [fin_range]; rw [list.nth_le_pmap]; simp *
+
+lemma fin_range_map_nth_le {l : list α} :
+  (list.fin_range l.length).map (λ x, l.nth_le x.1 x.2) = l :=
+list.ext_le (by simp) (λ _ _ _, by rw [nth_le_map, list.nth_le_fin_range])
+
+lemma length_filter_eq_card_fin {l : list α} (p : α → Prop) :
+  list.length (list.filter p l) =
+    (univ.filter (λ x : fin l.length, p (l.nth_le x.1 x.2))).card :=
+calc list.length (list.filter p l)
+    = (((list.fin_range l.length).map (λ x : fin l.length, l.nth_le x.1 x.2)).filter p).length :
+  by rw [fin_range_map_nth_le]
+... = ((list.fin_range l.length).filter (λ x : fin l.length, p (l.nth_le x.1 x.2))).length :
+    by rw [filter_of_map, length_map]
+... = (finset.mk
+    ((list.fin_range l.length).filter (λ x : fin l.length, p (l.nth_le x.1 x.2)))
+    (list.nodup_filter _ (nodup_fin_range _))).card : rfl
+... = _ : congr_arg card (finset.ext.2 (by simp))
+
+lemma card_filter_univ [fintype α] (p : α → Prop) :
+  card (univ.filter p) = fintype.card (subtype p) :=
+begin
+  refine (finset.card_congr (λ a _, ↑a) _ _ _).symm,
+  { rintros ⟨_, h⟩ _; simp * },
+  { rintros ⟨_, _⟩ ⟨_, _⟩; simp },
+  { intros b hb,
+    refine ⟨⟨b, (finset.mem_filter.1 hb).2⟩, by simp⟩, }
+end
+#print classical.axiom_of_choice
+example {α : Sort*} {β : α → Sort*} :
+  (∀ a, nonempty (β a)) ↔ nonempty (Π a, β a) :=
+by library_search
+
+example {l₁ l₂ : list β} {r : α → β → Prop}
+  (nodup : ∀ (x y : α) (b : β), x ≠ y → ¬ (r x b ∧ r y b))
+  (h : ∀ a : α, l₁.countp (r a) = l₂.countp (r a)) :
+  l₁.countp (λ b, ∃ a, r a b) = l₂.countp (λ b, ∃ a, r a b) :=
+begin
+  simp only [countp_eq_length_filter, length_filter_eq_card_fin,
+    card_filter_univ, fintype.card_eq, skolem_nonempty] at *,
+  cases h with f,
+  split,
+  exact ⟨λ x, ⟨f x, _⟩, _, _, _⟩
+
+
+
+
+
+end
+
+
+#exit
+prelude
+import init.logic
+set_option old_structure_cmd true
+
+universe u
+
+class comm_semigroup (α : Type u) extends has_mul α
+
+class monoid (α : Type u) extends has_mul α, has_one α :=
+(one_mul : ∀ a : α, 1 * a = a)
+
+class comm_monoid (α : Type u) extends comm_semigroup α, has_one α :=
+(one_mul : ∀ a : α, 1 * a = a)
+
+set_option pp.all true
+
+class X (α : Type u) extends monoid α, comm_monoid α
+
+#exit
+--import data.real.basic
+
+def injective (f : ℤ → ℤ ) := ∀ x x', f x = f x' → x = x'
+
+example (f g : ℤ → ℤ) :
+  injective f → injective g → injective (g ∘ f) :=
+begin
+  intros hf hg x x' gof,
+  rw hf x,
+  rw hg (f x),
+  exact gof,
+end
+
+open finset
+
+open_locale classical
+
+example {α β : Type} {x : α} {v : β → α} [comm_monoid α] [fintype β] :
+  finset.univ.prod (λ (i : option β), i.elim x v) = x * finset.univ.prod v :=
+calc univ.prod (λ (i : option β), i.elim x v)
+    = x * (univ.erase (none)).prod (λ (i : option β), i.elim x v) :
+  begin
+    conv_lhs { rw [← insert_erase (mem_univ (none : option β))] },
+    rw [prod_insert (not_mem_erase _ _)], refl
+  end
+... = x * finset.univ.prod v :
+  begin
+    refine congr_arg2 _ rfl (prod_bij (λ a _, some a) _ _ _ _).symm,
+    { simp },
+    { intros, refl },
+    { simp },
+    { assume b,
+      cases b with b,
+      { simp },
+      { intro, use b, simp } }
+  end
+
+import data.zmod.quadratic_reciprocity
+
+open finset
+
+def Fib : ℕ → ℕ
+| 0 := 0
+| 1 := 1
+| (n + 2) := Fib n + Fib (n + 1)
+
+theorem sum_Fib (n : ℕ) : 1 + (range n).sum Fib = Fib (n + 1) :=
+by induction n; simp [sum_range_succ, Fib, *]
+#print sum_Fib
+#exit
+import algebra.group_power tactic.ring
+
+example (x y : ℤ) : y^4 + 9 * y^2 + 20 ≠ x^3 :=
+suffices (y^2 + 5) * (y^2 + 4) ≠ x^3,
+  by ring at *; assumption,
+assume h : (y^2 + 5) * (y^2 + 4) = x^3,
+
+
+#exit
+import data.finset
+
+set_option profiler true
+
+#eval (finset.range 200).filter (λ x, x % 2 = 0)
+
+
+def has_min_element {A : Type} (R : A → A → Prop) : Prop :=
+    ∃ x, ∀ y, R x y
+axiom ax1 {n m: ℕ} : (n ≤ m) ↔ (∃ l : ℕ, n + l = m)
+axiom ax2 {m n x y: ℕ} (h1 : x + n = y) (h2 : y + m = x): x = y ∧ (m = 0) ∧ (n = 0)
+axiom ax3 {m n x y z : ℕ} (h1 : x + n = y) (h2 : y + m = z) : x + (n + m) = z
+axiom ax4 : 1 ≠ 2
+axiom ax5 (m n : ℕ) : ∃ l : ℕ, m + l = n ∨ n + l = m
+axiom ax6 (n : ℕ) : 0 + n = n
+
+theorem le_not_symmetric : ¬ (symmetric nat.less_than_or_equal) :=
+λ h, absurd (@h 0 1 dec_trivial) dec_trivial
+
+example : ¬ (equivalence nat.less_than_or_equal) :=
+λ h, le_not_symmetric h.2.1
+
+variables (U : Type) (P R: U → Prop)(Q : Prop)
+example (h1a : ∃ x, P x) (h1b : ∃ x, R x) (h2 : ∀ x y, P x → R y → Q) : Q :=
+begin
+  cases h1a with x hPx,
+  cases h1b with y hRy,
+end
+
+#eval (finset.range 10000).filter
+  (λ y, ∃ x ∈ finset.range (nat.sqrt y), y^2 + 9 * y + 20 = x)
+
+-- #eval let n  : ℕ+ := 511 in (finset.univ).filter
+--   (λ y : zmod n, ∃ x, y^4 + 9 * y ^ 2 + 20 = x)
+
+
+example (a b s : ℚ) (hs : s * s = -35):
+  (a + b * (1 + s)/ 2)^3 =
+  a^3 + 3 * a^2 * b / 2 - 51 * a * b^2 / 2 - 13 * b ^ 3
+  + (3 * a^2 * b /2+ 3 * a * b ^ 2 /2- 4 * b^3) * s:=
+begin
+  simp [pow_succ, mul_add, add_mul, mul_comm s, mul_assoc,
+    mul_left_comm s, hs, div_eq_mul_inv],
+  ring,
+  -- simp [bit0, bit1, mul_add, add_mul, add_assoc, add_comm,
+  --   add_left_comm, mul_assoc, mul_comm, mul_left_comm],
+
+
+end
+
+#eval (finset.univ : finset (zmod 24 × zmod 24)).image
+  (λ x : zmod 24 × zmod 24, x.1^2 + 6 * x.2^2 )
+
+#exit
+
+
+import data.list
+noncomputable theory
+open_locale classical
+universe u
+variables {α : Type u} (a : α) (l : list α)
+
+theorem count_eq_countp {h : decidable_pred (λ x, a = x)} :
+  l.count a = l.countp (λ x, a = x) := sorry
+theorem count_eq_countp' : l.count a = l.countp (λ x, x = a) :=
+begin
+  conv in (_ = a) { rw eq_comm, },
+  convert (count_eq_countp a l), -- error here
+end
+#exit
+import data.nat.parity
+open nat
+
+
+
+
+example {x y : ℕ} : even (x^2 + y^2) ↔ even (x + y) :=
+by simp [show 2 ≠ 0, from λ h, nat.no_confusion h] with parity_simps
+
+#exit
+import ring_theory.ideals algebra.associated
+
+open ideal
+
+local infix ` ≈ᵤ `: 50 := associated
+
+variables {R : Type*} [integral_domain R]
+  (wf : well_founded (λ x y : R, span {y} < span ({x} : set R)))
+  (hex : ∀ p q : R, irreducible p → irreducible q → ¬ p ≈ᵤ q →
+    ∃ x : R, x ∈ span ({p, q} : set R) ∧ x ≠ 0 ∧ x ≠ p ∧ x ≠ q ∧
+      (span {p} < span ({x} : set R) ∨ span {q} < span ({x} : set R)))
+
+lemma exists_irreducible_factor {a : R} (hau : ¬ is_unit a) :
+  ∃ p, irreducible p ∧ p ∣ a := sorry
+
+include hex
+
+example (a b : R) : ∀ (p q : R) (hp : irreducible p) (hq : irreducible q) (hpq : ¬ p ≈ᵤ q)
+  (hpa : p * b = q * a), p ∣ a :=
+have ¬ is_unit a, from sorry,
+well_founded.fix wf
+begin
+  assume a ih p q hp hq hpq hpa,
+  cases exists_irreducible_factor this with r hr,
+  cases hex p q hp hq hpq with x hx,
+  have : span ({a} : set R) < span {x},
+    from hx.2.2.2.2.elim
+      (lt_of_le_of_lt sorry)
+      (lt_of_le_of_lt _),
+
+end a
+
+
+
+
+#exit
+import data.nat.prime
+
+open nat
+
+theorem sqrt_two_irrational_V1 {a b : ℕ} (co : gcd a b = 1) : a^2 ≠ 2 * b^2 :=
+assume h : a^2 = 2 * b^2,
+have 2 ∣ a^2,
+    by simp [h],
+have ha : 2 ∣ a,
+    from prime.dvd_of_dvd_pow prime_two this,
+-- this line below is wrong
+match ha with | ⟨c, aeq⟩ :=
+have 2 * (2 * c^2) = 2 * b^2,
+    by simp [eq.symm h, aeq];
+       simp [nat.pow_succ, mul_comm, mul_assoc, mul_left_comm],
+have 2 * c^2 = b^2,
+    from eq_of_mul_eq_mul_left dec_trivial this,
+have 2 ∣ b^2,
+    by simp [eq.symm this],
+have hb : 2 ∣ b,
+    from prime.dvd_of_dvd_pow prime_two this,
+have 2 ∣ gcd a b,
+    from dvd_gcd ha hb,
+have habs : 2 ∣ (1:ℕ),
+    by simp * at *,
+show false, from absurd habs dec_trivial
+end
+#print sqrt_two_irrational_V1
+
+#exit
+example (A B : Prop) : A → (A ∧ B) ∨ (A ∧ ¬ B) :=
+assume a : A,
+  classical.by_contradiction
+    (assume h : ¬((A ∧ B) ∨ (A ∧ ¬ B)),
+      have nb : ¬ B, from
+        assume b : B,
+          h (or.inl ⟨a, b⟩),
+      h (or.inr ⟨a, nb⟩))
+
+#exit
+import logic.basic
+#print eq.drec_on
+axiom choice (X : Type) : X ⊕ (X → empty)
+
+def choice2 {α : Type} {β : α → Type*} (h : ∀ x, nonempty (β x)) :
+  nonempty (Π x, β x) :=
+⟨λ x, sum.cases_on (choice (β x)) id
+  (λ f, false.elim (nonempty.elim (h x) (λ y, empty.elim (f y))))⟩
+
+
+#exit
+import data.sum linear_algebra.basic
+
+example {α α' β β' : Type} (f : α → α') (g : β → β') :
+  α ⊕ β → α' ⊕ β'
+| (sum.inl a) := sum.inl (f a)
+| (sum.inr b) := sum.inr (g b)
+
+example {A A' B B' : Type} [add_comm_group A]
+  [add_comm_group A'] [add_comm_group B] [add_comm_group B']
+  (f : A →+ A') (g : B →+ B') :
+  A × A' → B × B'
+
+lemma inv_unique {x y z : M}
+  (hy : x * y = 1) (hz : z * x = 1) : y = z :=
+by rw [← one_mul y, ← hz, mul_assoc, hy, mul_one]
+
+
+
+#exit
+
+
+
+
+import data.pfun
+
+import data.list.defs
+
+namespace tactic
+
+meta def match_goals (ls : list (ℕ × ℕ)) : tactic unit := do
+  gs ← get_goals,
+  ls.mmap' $ λ ⟨a, b⟩, unify (gs.inth a) (gs.inth b),
+  set_goals gs
+#print tactic.interactive.induction
+meta def interactive.cases_symmetric
+  (a b : interactive.parse (lean.parser.pexpr std.prec.max)) : tactic unit := do
+  a ← to_expr a,
+  b ← to_expr b,
+  env ← get_env,
+  ty ← infer_type a,
+  let n := (env.constructors_of ty.get_app_fn.const_name).length,
+  (() <$ cases_core a [`a]); (() <$ cases_core b [`a]),
+  match_goals $ do
+    a ← list.range n,
+    b ← list.range n,
+    guard (b < a),
+    return (n * a + b, n * b + a)
+end tactic
+
+inductive weekday
+| sun | mon | tue | wed | thu | fri | sat
+
+example : weekday → weekday → nat :=
+begin
+  intros a b,
+  cases_symmetric a b,
+end
+
+
+
+
+import init.data.nat.basic
+import init.algebra.ring
+import data.nat.parity
+import init.algebra.norm_num
+import data.equiv.list
+import tactic.omega
+import data.W
+#print int.sizeof
+#print subtype.range_val
+#print W
+def N : Type := W (λ b : bool, bool.cases_on b empty unit)
+
+def F : N → ℕ := λ n, W.rec_on n
+  (λ b, bool.cases_on b (λ _ _, 0) (λ _ f, nat.succ (f ())))
+
+def G : ℕ → N := λ n, nat.rec_on n
+  (W.mk ff empty.elim)
+  (λ _ ih, W.mk tt (λ _, ih))
+
+lemma FG (n : ℕ) : F (G n) = n :=
+nat.rec_on n rfl
+  (begin
+    dsimp [F, G],
+    assume n h,
+    rw h,
+  end)
+
+lemma GF (n : N) : G (F n) = n :=
+W.rec_on n
+  (λ b, bool.cases_on b
+    (λ b _, begin
+      have h : b = (λ x, empty.elim x), from funext (λ x, empty.elim x),
+      simp [G, F, h], refl,
+    end)
+    (λ f, begin
+      dsimp [F, G],
+      assume ih,
+      rw ih (),
+      congr, funext, congr,
+
+
+    end))
+
+open finset
+example {s : finset ℕ} (x : ℕ) (h : x ∈ s) : s \ {x} ⊂ s :=
+finset.ssubset_iff.2 ⟨x, by simp,
+  λ y hy, (mem_insert.1 hy).elim (λ hxy, hxy.symm ▸ h) (by simp {contextual := tt})⟩
+
+#eval denumerable.equiv₂ ℕ (ℕ × ℕ × ℕ × ℕ × ℕ) 15
+3192
+#eval 2^12
+
+--Alice only sees r and Bob only sees c. The strategy isn't (r,c) → (...) but two maps, r→(r1 r2 r3) and c → (c1 c2 c3)
+--I'm using 0 and 1 instead of Green and Red as the two options to fill squares. This makes checking parity of strategies easier
+open nat
+def checkStrategyrc (r c : ℕ) (strategy : ((ℕ → ℕ × ℕ × ℕ) × (ℕ → ℕ × ℕ × ℕ))) : Prop :=
+--functionalize this with lists.
+let r1 := (strategy.1 r).1,
+r2 := (strategy.1 r).2.1,
+r3 := (strategy.1 r).2.2,
+c1 := (strategy.2 c).1,
+c2 := (strategy.2 c).2.1,
+c3 := (strategy.2 c).2.2
+
+    in even (r1 + r2 + r3) ∧ ¬ even (c1 + c2 + c3) ∧
+    ((r = 1 ∧ c = 1 ∧ r1 = c1) ∨ (r = 1 ∧ c = 2 ∧ r2 = c1) ∨ (r = 1 ∧ c = 3 ∧ r3 = c1)
+    ∨(r = 2 ∧ c = 1 ∧ r1 = c2) ∨ (r = 2 ∧ c = 2 ∧ r2 = c2) ∨ (r = 2 ∧ c = 3 ∧ r3 = c2)
+    ∨(r = 3 ∧ c = 1 ∧ r1 = c3) ∨ (r = 3 ∧ c = 2 ∧ r2 = c3) ∨ (r = 3 ∧ c = 3 ∧ r3 = c3))
+--checks all three conditions are met for the strategy
+def checkStrategy (strategy : ((ℕ → ℕ × ℕ × ℕ) × (ℕ → ℕ × ℕ × ℕ))) : Prop :=
+(checkStrategyrc 1 1 strategy) ∧ (checkStrategyrc 1 2 strategy) ∧ (checkStrategyrc 1 3 strategy) ∧
+(checkStrategyrc 2 1 strategy) ∧ (checkStrategyrc 2 2 strategy) ∧ (checkStrategyrc 2 3 strategy) ∧
+(checkStrategyrc 3 1 strategy) ∧ (checkStrategyrc 3 2 strategy) ∧ (checkStrategyrc 3 3 strategy)
+
+
+
+instance : decidable_pred checkStrategy :=
+λ _, by dunfold checkStrategy checkStrategyrc even; apply_instance
+
+-- theorem notnoStrategy : ∃ (strategy : ((ℕ → ℕ × ℕ × ℕ) × (ℕ → ℕ × ℕ × ℕ))),
+--   (checkStrategy (strategy)) :=
+-- ⟨(λ _, (0, 0, 0), λ _, (0, 0, 0)), dec_trivial⟩
+
+-- --someone on Zulip said to try putting this not directly after the import statements. This seems to have helped
+-- open_locale classical
+-- --given a strategy, we can't have it satisfy all the conditions
+theorem noStrategy2 (strategy : ((ℕ → ℕ × ℕ × ℕ) × (ℕ → ℕ × ℕ × ℕ))) : ¬ (checkStrategy (strategy)) :=
+begin
+  dsimp [checkStrategy, checkStrategyrc],
+  simp only [eq_self_iff_true, true_and,
+    (show (1 : ℕ) ≠ 2, from dec_trivial),
+    (show (1 : ℕ) ≠ 3, from dec_trivial),
+    false_and, false_or, or_false,
+    (show (3 : ℕ) ≠ 1, from dec_trivial),
+    (show (3 : ℕ) ≠ 2, from dec_trivial),
+    (show (2 : ℕ) ≠ 1, from dec_trivial),
+    (show (2 : ℕ) ≠ 3, from dec_trivial)],
+  generalize h : strategy.1 0 = x₁,
+  generalize h : strategy.1 1 = x₂,
+  generalize h : strategy.1 2 = x₃,
+  generalize h : strategy.1 3 = x₄,
+  generalize h : strategy.2 0 = y₁,
+  generalize h : strategy.2 1 = y₂,
+  generalize h : strategy.2 2 = y₃,
+  generalize h : strategy.2 3 = y₄,
+  clear h h h h h h h h strategy,
+  rcases x₁ with ⟨_, _, _⟩,
+  rcases x₂ with ⟨_, _, _⟩,
+  rcases x₃ with ⟨_, _, _⟩,
+  rcases x₄ with ⟨_, _, _⟩,
+  rcases y₁ with ⟨_, _, _⟩,
+  rcases y₂ with ⟨_, _, _⟩,
+  rcases y₃ with ⟨_, _, _⟩,
+  rcases y₄ with ⟨_, _, _⟩,
+  simp with parity_simps,
+  simp only [iff_iff_implies_and_implies],
+  finish,
+
+
+end
+
+example : true := trivial
+
+#eval (∃ f : (vector (fin 2 × fin 2 × fin 2) 3 × vector (fin 2 × fin 2 × fin 2) 3),
+    (checkStrategy (λ n, ((f.1.nth (n - 1)).map fin.val) (prod.map fin.val fin.val),
+    λ n, ((f.2.nth (n - 1)).map fin.val) (prod.map fin.val fin.val))) : bool)
+
+
+
+#exit
+import algebra.pointwise
+import ring_theory.algebra
+
+local attribute [instance] set.smul_set_action
+
+variables (R : Type*) [comm_ring R]
+
+variables (A : Type*) [ring A] [algebra R A]
+set_option class.instance_max_depth 26
+example : mul_action R (set A) :=
+by apply_instance -- works
+
+variables (B : Type*) [comm_ring B] [algebra R B]
+
+set_option trace.class_instances true
+set_option class.instance_max_depth 34
+example : mul_action R (set B) :=
+by apply_instance -- fails
+
+
+import data.finset data.int.sqrt data.nat.parity data.complex.exponential
+
+example : finset ℤ := by library_search
+
+example (n : ℕ) : finset ℤ := finset.map ⟨int.of_nat, @int.of_nat.inj⟩
+  (finset.range n)
+
+#exit
+import data.quot data.setoid
+
+meta def quotient_choice {α β : Type} [s : setoid β]
+  (f : α → quotient s) : quotient (@pi_setoid _ _ (λ a : α, s)) :=
+quotient.mk (λ a : α, quot.unquot (f a))
+
+--applying choice to the identity map
+def decidable_true
+  (quotient_choice : Π {α β : Type} [s : setoid β]
+    (f : α → quotient s), quotient (@pi_setoid _ _ (λ a : α, s))) :
+  decidable true :=
+-- ⊤ is the always true relation
+by letI : setoid bool := ⊤; exact
+quot.rec_on_subsingleton (@quotient_choice (@quotient bool ⊤) bool ⊤ id)
+  (λ f, decidable_of_iff (f ⟦ff⟧ = f ⟦tt⟧)
+    (iff_true_intro (congr_arg f (quotient.sound trivial))))
+
+#eval decidable_true @quotient_choice
+
+#exit
+import data.quot
+
+variables {A : Type} {B : A → Type}
+
+example (f : Π a : A, trunc (sigma B)) :
+  trunc (Π a : A, sigma B) :=
+
+
+#exit
+import data.set.basic data.set.lattice
+
+example {s t : set ℕ} : s < t ↔ s ⊂ t := iff.rfl
+example {s t : set ℕ} : s ≤ t ↔ -s ≤ -t := by library_search
+set_option class.instance_max_depth 1000
+
+local attribute
+
+def decidable_true (choice : Π {α : Type*} {β : α → Type*}
+  (f : Π a, @quotient (β a) ⊤), @quotient (Π a, β a) ⊤) : decidable true :=
+quot.rec_on_subsingleton (choice (id : @quotient bool ⊤ → @quotient bool ⊤))
+  (λ f, decidable_of_iff (f (quotient.mk' ff) = f (quotient.mk' tt))
+    (iff_true_intro (congr_arg f (quotient.sound' (by constructor))))
+
+example : @quotient.choice (@quotient bool ⊤) (λ _, @quotient bool ⊤)
+  ()
+
+#exit
+Copyright (c) 2020 Johan Commelin. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Johan Commelin
+-/
+
+import data.nat.basic data.fintype
+import tactic
+
+/-!
+# Strong recursion
+
+A strong recursion principle based on `fin`.
+The benefit of `(Π (m:fin n), X m)` over `Π (m:ℕ) (h:m < n), X m`
+is that with `fin` the bound on `m` is bundled,
+and this can be used in later proofs and constructions.
+
+## Example
+
+For example, one can use this to give a definition of the Bernoulli numbers
+that closely follows the recursive definition found at
+https://en.wikipedia.org/wiki/Bernoulli_number#Recursive_definition
+It is:
+$$ B_n = 1 - \sum_{k < n} \binom{n}{k} \frac{B_k}{n - k + 1} $$
+
+```
+example : ℕ → ℚ :=
+strong_recursion $ λ n bernoulli,
+1 - finset.univ.sum (λ k : fin n, (n.choose k) * bernoulli k / (n - k + 1))
+```
+
+This example shows the benefit of using `fin n` in the implementation,
+because it allows us to use `finset.univ.sum` which enables the recursive call `bernoulli k`.
+If, on the other hand, we had used `Π (m:ℕ) (h:m < n), X m` and `(finset.range n).sum`,
+then the recursive call to `bernoulli k` would get stuck,
+because it would come with a proof obligation `k < n`
+which isn't provided by `(finset.range n).sum`.
+
+-/
+
+namespace nat
+universe variable u
+variables {X : ℕ → Sort u} (f : Π n, (Π (m:fin n), X m) → X n)
+
+/-- A strong recursion principle for the natural numbers.
+It allows one to recursively define a function on ℕ
+by showing how to extend a function on `fin n := {k // k < n}` to `n`. -/
+def strong_recursion : Π n : ℕ, X n
+| n := f _ (λ k : fin n, have wf : ↑k < n, from k.2, strong_recursion ↑k)
+
+lemma strong_recursion_apply (n : ℕ) :
+  strong_recursion f n = f n (λ i, strong_recursion f i) :=
+by rw strong_recursion
+
+-- Example: Fibonacci
+example : ℕ → ℚ :=
+strong_recursion $ λ n fib,
+match n, fib with
+| 0 := λ _, 0
+| 1 := λ _, 1
+| (k+2) := λ fib, fib k + fib (k+1)
+end
+
+
+-- Example: Bernoulli
+def bernoulli₁ : ℕ → ℚ :=
+strong_recursion $ λ n bernoulli,
+1 - finset.univ.sum (λ k : fin n, (n.choose k) * bernoulli k / (n - k + 1))
+
+def bernoulli (n : ℕ) : ℚ :=
+well_founded.fix nat.lt_wf
+  (λ n bernoulli, 1 - finset.univ.sum
+    (λ k : fin n, (n.choose k) * bernoulli k k.2 / (n - k + 1))) n
+
+#eval (λ k, bernoulli₂ k - bernoulli₁ k) 8
+
+end nat
+#exit
+import logic.basic
+
+open classical
+variables (α : Type) (p q : α → Prop)
+variable a : α
+#print classical.not_forall
+local attribute [instance] classical.prop_decidable
+theorem T08R [∀ x, decidable (p x)] (h : (¬ ∀ x, p x) → (∃ x, ¬ p x)) :
+  (∃ x, ¬ p x) ∨ ¬ (∃ x, ¬ p x) :=
+begin
+
+
+end
+
+#exit
+import data.nat.basic
+
+open nat
+
+lemma choose_mul_succ_eq (n k : ℕ) :
+  (n.choose k) * (n + 1) = ((n+1).choose k) * (n + 1 - k) :=
+begin
+  by_cases hkn : k ≤ n,
+  { have pos : 0 < fact k * fact (n - k), from mul_pos (fact_pos _) (fact_pos _),
+    rw [← nat.mul_left_inj pos],
+    suffices : choose n k * fact k * fact (n - k) * (n + 1) =
+      choose (n + 1) k * fact k * ((n + 1 - k) * fact (n - k)),
+    { simpa [mul_comm, mul_assoc, mul_left_comm] },
+    rw [choose_mul_fact_mul_fact hkn, nat.succ_sub hkn, ← fact_succ,
+      ← nat.succ_sub hkn, choose_mul_fact_mul_fact (le_succ_of_le hkn), fact_succ,
+      mul_comm] },
+  simp [choose_eq_zero_of_lt (lt_of_not_ge hkn), nat.sub_eq_zero_iff_le.2 (lt_of_not_ge hkn)],
+end
+
+
+open classical
+variables {α : Type} {p : α → Prop}
+
+theorem T06_1 : ¬ (∀ x, ¬ p x) → (∃ x, p x) :=
+    (assume hnAxnpx : ¬ (∀ x, ¬ p x),
+        by_contradiction
+            (λ hnExpx : ¬ (∃ x, p x),
+                (hnAxnpx
+                    (λ x, (λ hpx,
+                        hnExpx (exists.intro x hpx))))))
+#check T06_1
+-- it appears this is needed in tactic mode
+local attribute [instance] classical.prop_decidable
+theorem T06_2 : ¬ (∀ x, ¬ p x) → (∃ x, p x) :=
+begin
+    intro hnAxnpx,
+    by_contradiction,
+end
+
+#exit
+import topology.separation data.set.finite algebra.associated data.equiv.basic tactic.ring
+
+example {α : Type} {p : α → Prop} (r : Prop): (∀ x, p x ∨ r) → ∀ x, p x ∨ r :=
+assume h : ∀ x, p x ∨ r, assume a: α,
+  or.elim (h a)
+  (assume hl: p a,
+    show p a ∨ r, from
+      or.inl hl)
+  (assume hr: r,
+    show p a ∨ r, from or.inr hr)
+
+
+example {M : Type} [monoid M] {a b c : M} (h : a * b = 1) (h2 : c * a = 1) : b = c :=
+by rw [← one_mul b, ← h2, mul_assoc, h, mul_one]
+
+open set
+universes u v
+variables {X : Type u} [topological_space X] [normal_space X] {α : Type v}
+#print function.swap
+def T (s : set X) (u : α → set X) : Type (max u v) :=
+Σ (i : set α), {v : α → set X // s ⊆ Union v ∧ (∀ a, is_open (v a)) ∧
+  (∀ a ∈ i, closure (v a) ⊆ u a) ∧ (∀ a ∉ i, v a = u a)}
+
+def le_aux (s : set X) (u : α → set X) : T s u → T s u → Prop :=
+λ t t', t.1 ⊆ t'.1 ∧ ∀ a ∈ t.1, t.2.1 a = t'.2.1 a
+
+instance (s : set X) (u : α → set X) : preorder (T s u) :=
+{ le := le_aux s u,
+  le_trans := λ ⟨u₁, v₁, hv₁⟩ ⟨u₂, v₂, hv₂⟩ ⟨u₃, v₃, hv₃⟩ ⟨hu₁₂, hv₁₂⟩ ⟨hu₂₃, hv₂₃⟩,
+    ⟨set.subset.trans hu₁₂ hu₂₃, λ a ha, (hv₁₂ a ha).symm ▸ hv₂₃ _ (hu₁₂ ha)⟩,
+  le_refl := λ t, ⟨set.subset.refl _, λ _ _, rfl⟩ }
+
+open_locale classical
+
+example (s : set X) (u : α → set X)
+  (su : s ⊆ Union u) (uo : ∀ a, is_open (u a)) :=
+@zorn.exists_maximal_of_chains_bounded (T s u) (≤)
+  (λ c hc,
+      ⟨⟨⋃ (t : T s u) (ht : t ∈ c), t.1,
+        λ a, ⋂ (t : T s u) (ht : t ∈ c), t.2.1 a,
+        ⟨begin
+          assume x hx,
+          simp only [set.mem_Union, set.mem_Inter],
+          cases set.mem_Union.1 (su hx) with a ha,
+          refine ⟨a, λ t ht, _⟩,
+          rwa t.2.2.2.2.2,
+        end,
+        λ a, is_open_Union (λ t, is_open_Union (λ ht, t.2.2.2.1 _)),
+        λ a ha, begin
+          simp only [set.mem_Union] at ha,
+          rcases ha with ⟨t, htc, ha⟩,
+          have := t.2.2.2.2.1 a ha,
+          assume x hx, sorry
+
+        end,
+        begin
+          assume a ha,
+          ext,
+          simp only [set.mem_Union, not_exists] at *,
+          split,
+          { rintro ⟨t, htc, ht⟩,
+            rwa ← t.2.2.2.2.2 a (ha _ htc) },
+          { assume hau,
+            cases hcn with t htc,
+            use [t, htc],
+            rwa t.2.2.2.2.2 _ (ha _ htc) }
+        end⟩⟩,
+      λ t htc, ⟨λ x hx, set.mem_Union.2 ⟨t, by simp *⟩,
+        λ a, begin
+
+        end⟩⟩
+    )
+  (λ _ _ _, le_trans)
+
+lemma shrinking_lemma
+  {s : set X} (hs : is_closed s) (u : α → set X) (uo : ∀ a, is_open (u a))
+  (uf : ∀ x, finite {a | x ∈ u a}) (su : s ⊆ Union u) :
+  ∃ v : α → set X, s ⊆ Union v ∧ ∀ a, is_open (v a) ∧ closure (v a) ⊆ u a :=
+
+#exit
+import data.equiv.encodable
+
+#eval @encodable.choose (ℕ × ℕ) (λ x, x.1 ^2 - 26 * x.2 ^2 = 1 ∧ x.2 ≠ 0) _ _ sorry
+
+#exit
+import data.mv_polynomial
+
+def eval_list :
+
+#exit
+import data.set.basic
+
+#print set.image_preimage_eq
+
+inductive heq' {α : Type} (a : α) : Π {β : Type}, β → Type
+| refl : heq' a
+
+inductive eq' {α : Type} (a : α) : α → Type
+| refl : eq' a
+
+lemma eq_of_heq' {α : Type} (a b : α) : heq' a b → eq' a b :=
+begin
+  assume h,
+  cases h,
+  constructor,
+end
+#print eq_of_heq'
+#exit
+import topology.instances.real
+example : continuous (λ x : { x : ℝ × ℝ // x ≠ (0, 0) },
+  (x.1.1 * x.1.2) / (x.1.1^2 + x.1.2^2)) :=
+continuous.mul
+  (continuous.mul
+    (continuous_fst.comp continuous_subtype_val)
+    (continuous_snd.comp continuous_subtype_val))
+  (real.continuous.inv
+    (begin
+      rintros ⟨⟨x₁, x₂⟩, hx⟩, dsimp,
+      rw [ne.def, prod.mk.inj_iff, not_and] at hx,
+      dsimp, clear hx,
+      refine ne_of_gt _,
+      simp at *,
+      rcases classical.em (x₁ = 0) with rfl | hx₁,
+      { rcases classical.em (x₂ = 0) with rfl | hx₂,
+        { exact (hx rfl).elim },
+        { exact add_pos_of_nonneg_of_pos (pow_two_nonneg _)
+            (by rw pow_two; exact mul_self_pos hx₂) } },
+      { exact add_pos_of_pos_of_nonneg
+          (by rw pow_two; exact mul_self_pos hx₁)
+          (pow_two_nonneg _) }
+    end)
+    (continuous.add
+      ((continuous_pow 2).comp
+        (continuous_fst.comp continuous_subtype_val))
+      ((continuous_pow 2).comp
+        (continuous_snd.comp continuous_subtype_val)) ))
+
+example : continuous_on (λ x, x⁻¹ : ℝ → ℝ)
+  (≠ 0) := by library_search
+#print real.continuous_inv
+example : continuous_on (λ x : ℝ × ℝ,
+  (x.1 * x.2) / (x.1^2 + x.2^2)) (≠ (0, 0)):=
+continuous_on.mul
+  (continuous_on.mul
+    real.continuous_on
+    _)
+  (continuous_on.inv)
+
+#exit
+example (A B : Prop) : (¬ A ∧ ¬ B) ∨ (A ∧ B) ↔ (A ∨ B) ∧ ()
+
+#exit
+import set_theory.ordinal algebra.euclidean_domain
+universe u
+variables {α : Type u} (r : α → α → Prop) (wf : well_founded r)
+
+lemma psigma.lex.is_well_order {α : Type*} {β : α → Type*}
+  (r : α → α → Prop) (s : Π a, β a → β a → Prop) [is_well_order α r]
+  [∀ a, is_well_order (β a) (s a)] :
+  is_well_order (psigma β) (psigma.lex r s) :=
+{  }
+
+noncomputable def rank : α → ordinal.{u}
+| a := ordinal.sup.{u u} (λ b : {b : α // r b a},
+  have wf : r b.1 a, from b.2, ordinal.succ.{u} (rank b.1))
+using_well_founded {rel_tac := λ _ _, `[exact ⟨r, wf⟩],
+  dec_tac := tactic.assumption}
+
+lemma mono : ∀ {a b : α}, r a b → rank r wf a < rank r wf b
+| a := λ b hab, begin
+  rw [rank, rank],
+  refine lt_of_not_ge _,
+  assume hle,
+  rw [ge, ordinal.sup_le] at hle,
+  have := hle ⟨_, hab⟩,
+  rw [ordinal.succ_le, ← not_le, ordinal.sup_le, classical.not_forall] at this,
+  rcases this with ⟨c, hc⟩,
+  rw [ordinal.succ_le, not_lt] at hc,
+  exact have wf : _ := c.2, not_le_of_gt (mono c.2) hc
+end
+using_well_founded {rel_tac := λ _ _, `[exact ⟨r, wf⟩], dec_tac := tactic.assumption}
+
+def well_order : Π a b : Σ' a : α, {b // rank r wf b = rank r wf a}, Prop :=
+psigma.lex well_ordering_rel (λ _, rank r wf ∘ subtype.val ⁻¹'o (<))
+
+#print psigma.lex
+
+#exit
+import order.bounded_lattice
+
+instance : partial_order ℕ := linear_order.to_partial_order ℕ
+
+lemma exampl : well_founded ((<) : with_top ℕ → with_top ℕ → Prop) :=
+with_top.well_founded_lt nat.lt_wf
+
+#print axioms exampl
+
+#exit
+import data.zmod.basic data.matrix.basic order.filter
+
+variables {p : ℕ → Prop} [decidable_pred p]
+
+def rel' (p : ℕ → Prop) : ℕ → ℕ → Prop :=
+λ a b, ∀ n, p n → (∀ m, p m → n ≤ m) → a ≤ n ∧ b < a
+
+def exists_least_of_exists {n : ℕ} (h : p n) : ∃ m, p m ∧ ∀ k, p k → m ≤ k :=
+begin
+  resetI,
+  induction n with n ih generalizing p,
+  { exact ⟨0, h, λ _ _, nat.zero_le _⟩ },
+  { cases @ih (p ∘ nat.succ) _ h with m hm,
+    by_cases hp0 : p 0,
+    { exact ⟨0, hp0, λ _ _, nat.zero_le _⟩ },
+    { use [m.succ, hm.1],
+      assume k hpk,
+      cases k with k,
+      { contradiction },
+      exact nat.succ_le_succ (hm.2 k hpk) } }
+end
+
+#print axioms with_top.well_founded_lt
+
+lemma rel'_wf (h : ∃ n, p n) : well_founded (rel' p) :=
+begin
+  cases h with n hn,
+  cases exists_least_of_exists hn with m hm,
+  clear hn n,
+  refine @subrelation.wf _ (measure (λ a, m - a)) _ _ (measure_wf _),
+  assume a b hab,
+  rcases hab m hm.1 hm.2 with ⟨ham, hba⟩,
+  clear hm hab,
+  show m - a < m - b,
+  induction ham with z,
+  rw nat.sub_self,
+  exact nat.sub_pos_of_lt hba,
+  rw [nat.succ_sub ham_a, nat.succ_sub],
+  exact nat.succ_lt_succ ham_ih,
+  exact le_trans(le_of_lt hba) ham_a,
+end
+
+attribute [elab_as_eliminator] well_founded.fix
+
+#print axioms le_of_not_gt
+
+lemma nat.lt_of_le_of_ne  {a b : ℕ} (hle : a ≤ b) (hne : a ≠ b) : a < b :=
+begin
+  induction hle,
+  { exact (hne rfl).elim },
+  exact nat.lt_succ_of_le hle_a
+end
+
+def find (h : ∃ n, p n) : {n // p n ∧ ∀ m, p m → n ≤ m} :=
+well_founded.fix (rel'_wf h)
+  (λ n ih hn, if hpn : p n then ⟨n, hpn, hn⟩
+    else ih n.succ (λ k hk h, ⟨nat.succ_le_of_lt (nat.lt_of_le_of_ne (hn _ hk)
+        (by rintro rfl; exact (hpn hk).elim)), nat.lt_succ_self _⟩)
+      (λ m hm, nat.succ_le_of_lt (nat.lt_of_le_of_ne (hn _ hm)
+      (by rintro rfl; exact (hpn hm).elim)))) 0
+  (show ∀ m, p m → 0 ≤ m, from λ _ _, nat.zero_le _)
+set_option profiler true
+#eval @find     (> 1000000) _ sorry
+#eval @nat.find (> 1000000) _ sorry
+#print axioms find
+
+#eval (6/10 : zmodp 5 (by norm_num))
+
+#exit
+import set_theory.ordinal tactic
+
+lemma exampl {α β : Type} (f : α → β) (hf : function.surjective f) : function.injective (set.preimage f) :=
+λ s t, begin
+  simp only [set.ext_iff],
+  assume h x,
+  rcases hf x with ⟨y, rfl⟩,
+  exact h y
+end
+
+#print rfl
+#reduce exampl
+
+
+#exit
+import data.nat.gcd data.equiv.basic
+
+#print equiv.set.univ
+
+#exit
+import data.set.basic data.fintype.basic data.equiv.encodable
+
+variables {R A : Type} (P : R → A → bool)
+
+def 𝕍_ (S : set R) : set A :=
+{x : A | ∀ f ∈ S, P f x}
+
+notation `𝕍`:max := 𝕍_ (by exact P)
+
+def 𝕀_ (X : set A) : set R :=
+{f : R | ∀ x ∈ X, P f x}
+
+notation `𝕀`:max := 𝕀_ (by exact P)
+
+set_option class.instance_max_depth 200
+
+#eval let s := @fintype.choose (Σ' (P : finset (unit × unit)) (Y J : finset (unit)),
+  (∀ (x : unit), (∀ (x_1 : unit), x_1 ∈ Y → ((x, x_1) ∈ P)) → x ∈ J) ∧ ¬
+    ∀ (x : unit), (∀ (f : unit), f ∈ J → ((f, x) ∈ P)) → x ∈ Y) _ _ (λ _, true) _ sorry in
+(s.1, s.2.1, s.2.2.1)
+
+lemma Galois_connection : ¬
+  ∀ (P : unit→ unit→ bool) {Y : finset (unit)} {J : finset (unit)},
+  𝕀 (↑Y: set (unit)) ⊆ ↑J ↔ 𝕍 (↑J : set (unit)) ⊆ ↑Y :=
+begin
+  dsimp [𝕀_, 𝕍_, set.subset_def],
+  simp,
+  exact dec_trivial,
+
+end
+
+#exit
+import order.filter.basic
+
+#print filter.cofinite
+open filter set
+variables {α : Type*}
+@[simp] lemma mem_cofinite {s : set α} : s ∈ (@cofinite α) ↔ finite (-s) := iff.rfl
+
+example : @cofinite ℕ = at_top :=
+begin
+  ext s,
+  simp only [mem_cofinite, mem_at_top_sets],
+
+
+
+end
+
+#exit
+import data.mv_polynomial data.fintype
+
+open polynomial
+
+variables {R : Type*} {σ : Type*} [integral_domain R] [infinite R]
+
+open_locale classical
+
+lemma eval_eq_zero (f : polynomial R) : (∀ x, f.eval x = 0) ↔ f = 0 :=
+⟨λ h, let ⟨x, hx⟩ := infinite.exists_not_mem_finset (roots f) in
+  by_contradiction (mt mem_roots (λ hiff, hx (hiff.2 (h x)))),
+by rintro rfl; simp⟩
+#print mv_polynomial.comm_ring
+lemma mv_polynomial.eval_eq_zero (f : mv_polynomial σ R) : (∀ x, f.eval x = 0) ↔ f = 0 :=
+finsupp
+
+
+
+#exit
+import data.set.lattice
+variables p q r : Prop
+open set
+example (R : Type*) (A : Type*) (P : R → A → Prop)
+  (ι : Type*) (S : ι → set R) (x : A) :
+(∀ (f : R), (f ∈ ⋃ (i : ι), S i) → P f x) ↔
+  ∀ (i : ι) (f : R), f ∈ S i → P f x :=
+begin
+  simp, tauto,
+end
+
+theorem T2R : ((p ∨ q) → r) → (p → r) ∧ (q → r) :=
+begin
+    intros porqr,
+    split,
+    { assume hp : p,
+      apply porqr,
+      left,
+      exact hp },
+    { assume hq : q,
+      apply porqr,
+      right,
+      exact hq },
+end
+noncomputable theory
+open_locale classical
+
+def foo : Π (X : Type), X → X :=
+λ X, if h : X = ℕ then by {subst h; exact nat.succ } else id
+
+example (claim : (Π X : Type, X → X) ≃ unit) : false :=
+let foo : Π (X : Type), X → X :=
+  λ X, if h : X = ℕ then by {subst h; exact nat.succ } else id in
+by simpa [foo] using congr_fun (congr_fun (claim.injective
+   (subsingleton.elim (claim @id) (claim foo))) ℕ) 0
+
+#exit
+import linear_algebra.basic
+
+theorem Distr_or_L (p q r : Prop) : (p ∨ q) ∧ (p ∨ r) → p ∨ (q ∧ r) :=
+begin
+    intros pqpr,
+    have porq : p ∨ q, from pqpr.left,
+    have porr : p ∨ r, from pqpr.right,
+    { cases porq with hp hq,
+      { exact or.inl hp },
+      { cases porr with hp hr,
+        { exact or.inl hp },
+        { exact or.inr ⟨hq, hr⟩ } } }
+end
+#print linear_map
+example : Σ
+
+#exit
+import topology.compact_open topology.separation
+
+open function
+
+example {X Y : Type} [topological_space X] [topological_space Y] (f : X → Y) [compact_space X]
+  [t2_space Y] (hf : continuous f) (hfs : surjective f) (U : set Y) (hU : is_open (f ⁻¹' U)) :
+  is_open U :=
+have h : is_closed (f '' (f⁻¹' -U)), from _,
+begin
+
+
+
+end
+
+#exit
+import data.rat.denumerable
+
+#eval denumerable.equiv₂ ℕ ℚ 20
+
+#eval denumerable.equiv₂ ℚ ℕ ((denumerable.equiv₂ ℕ ℚ 3) + (denumerable.equiv₂ ℕ ℚ 1))
+
+#eval (denumerable.equiv₂ (Σ n : ℕ, fin n) ℕ) (8,3)
+
+constant fintype (α : Type) : Type
+
+attribute [class] fintype
+
+def card (α : Type) [fintype α]: ℕ := sorry
+
+constant fintype_subset {α : Type} [fintype α] {p : set α} : fintype ↥p
+
+attribute [instance] fintype_subset
+
+instance {α β : Type} [fintype β] (f : β → α) : fintype (set.range f) := sorry
+
+lemma subset_lemma {α : Type} [fintype α] {p : set α} : card p = card p := sorry
+
+example {α β : Type} [fintype α] [fintype β] (f : β → α) :
+  card (set.range f) = card (set.range f):=
+begin
+  rw [subset_lemma], --fails
+end
+
+#exit
+
 import data.setoid
 
 def M : Type := (classical.choice ⟨sigma.mk ℕ nat.monoid⟩).1
@@ -37,7 +4812,7 @@ instance : monoid M' :=
     (λ a, quotient.sound (mul_one (eval id a))) }
 
 #exit
-import data.fintype tactic.fin_cases
+import data.fintype.basic tactic.fin_cases
 variables p q : Prop
 
 open classical
@@ -107,27 +4882,6 @@ set_option pp.all true
 
 #print exampl
 
-constant fintype (α : Type) : Type
-
-attribute [class] fintype
-
-def card (α : Type) [fintype α] : ℕ := sorry
-
-constant fintype_range {α : Type} [fintype α] {p : set α} : fintype ↥p
-
-attribute [instance] fintype_range
-
-instance {α β : Type} [fintype β] (f : β → α) : fintype (set.range f) := sorry
-
-lemma subset_lemma {α : Type} [fintype α] {p : set α} : card p = card p := sorry
-
-example {α β : Type} [fintype α] [fintype β] (f : β → α) :
-  card (set.range f) = card (set.range f):=
-begin
-  rw [subset_lemma], --fails
-end
-
-#exit
 import system.io
 
 def main : io nat :=
@@ -142,7 +4896,7 @@ example (a b c : ℂ) :
 
 
 #exit
-import logic.basic data.fintype tactic.tauto
+import logic.basic data.fintype.basic tactic.tauto
 
 def xo (a b : Prop) := ¬(a ↔ b)
 
@@ -2130,7 +6884,7 @@ let ⟨y, hy⟩ := thingy_aux s hs hsn (real_equiv_real_mod_rat x) in
 ⟨y, hy.fst, by rw [f, function.comp_app, hy.snd, equiv.symm_apply_apply]⟩
 
 #exit
-import data.fintype data.zmod.basic
+import data.fintype.basic data.zmod.basic
 
 open finset equiv
 
@@ -3694,7 +8448,7 @@ mp (@axk p p) (mp axk axs)
 inductive consequence (G : list fml) : fml → Type
 | axk (p q) : consequence (p →' q →' p)
 | axs (p q r) : consequence $ (p →' q →' r) →' (p →' q) →' (p →' r)
-| axn (p q) : consequence $ ((¬'q) →' (¬'p)) →' p →' q
+| axn (p q) : consequence $ ((¬'q) →' (¬'p)) ���' p →' q
 | mp (p q) : consequence p → consequence (p →' q) → consequence q
 | of_G (g ∈ G) : consequence g
 
@@ -6430,7 +11184,7 @@ by simp only [closed_ball, Icc, dist, abs_sub_le_iff,
 #exit
 import ring_theory.determinant data.polynomial
 open polynomial
-def M : matrix (fin 3) (fin 3) (polynomial ℤ) :=
+def M : matrix (unit) (unit) (polynomial ℤ) :=
 λ r c, if r = 0 then if c = 1 then 1 else -1
   else if c = 0 then 0
   else if c = 1 then if r = 1 then -4 else -3
@@ -6691,7 +11445,7 @@ end complex
 
 
 #exit
-import data.fintype group_theory.order_of_element algebra.pi_instances
+import data.fintype.basic group_theory.order_of_element algebra.pi_instances
 
 variables {α : Type*} [fintype α] [decidable_eq α]
 
@@ -7925,7 +12679,7 @@ def g : topological_space ℝ := by apply_instance
 theorem nonethm {t} : (none <|> none)=@none t := rfl
 
 #exit
-import data.nat.basic data.fintype algebra.group_power
+import data.nat.basic data.fintype.basic algebra.group_power
 
 instance nat.decidable_bexists_lt (n : ℕ) (P : Π k < n, Prop)
   [∀ k h, decidable (P k h)] : decidable (∃ k h, P k h) :=
@@ -8305,7 +13059,7 @@ lemma em_of_iff_assoc : (∀ p q r : Prop, ((p ↔ q) ↔ r) ↔ (p ↔ (q ↔ r
 #print axioms em_of_iff_assoc
 
 #exit
-import data.fintype algebra.big_operators linear_algebra.linear_map_module
+import data.fintype.basic algebra.big_operators linear_algebra.linear_map_module
 #print finset.smul
 
 instance {α : Type*} [monoid α] [fintype α] : fintype (units α) :=
@@ -9319,7 +14073,7 @@ begin
   have := cg (f x)
 end
 #exit
-import data.fintype data.num.lemmas tactic.norm_num data.real.basic
+import data.fintype.basic data.num.lemmas tactic.norm_num data.real.basic
 #print prefix subsingleton
 
 @[elab_with_expected_type] lemma subsingleton_thing {α : Type*} [subsingleton α] {P : α → Prop} (a : α)
