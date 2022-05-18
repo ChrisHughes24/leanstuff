@@ -8,8 +8,8 @@ import tactic
 open finset function
 
 @[derive fintype, derive decidable_eq]
-structure cell := (r : fin 9) (c : fin 9)
-
+structure   cell := (r : fin 9) (c : fin 9)
+  
 def row (i : fin 9) : finset cell := filter (λ a, a.r = i) univ
 def col (i : fin 9) : finset cell := filter (λ a, a.c = i) univ
 def box (i : fin 9) : finset cell := filter (λ a, a.r / 3 = i / 3 ∧ a.c / 3 = i % 3) univ
